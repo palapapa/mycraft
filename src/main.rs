@@ -12,12 +12,12 @@ fn main() -> ExitCode {
     let event_loop = match EventLoop::new() {
         Ok(event_loop) => event_loop,
         Err(err) => {
-            error!("Could create the event loop. Error: {err}");
+            error!("Could not create the event loop. Error: {err}");
             return ExitCode::FAILURE;
         }
     };
     event_loop.set_control_flow(ControlFlow::Poll);
-    let mut app = App;
+    let mut app = App::default();
     match event_loop.run_app(&mut app) {
         Ok(()) => (),
         Err(err) => {
