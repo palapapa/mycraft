@@ -6,7 +6,8 @@ use env_logger::{Builder, Env};
 use log::{info, error};
 use winit::event_loop::{ControlFlow, EventLoop};
 
-fn main() -> ExitCode {
+#[tokio::main]
+async fn main() -> ExitCode {
     init_env_logger();
     info!("App started.");
     let event_loop = match EventLoop::new() {
@@ -25,6 +26,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
+    info!("Exiting.");
     ExitCode::SUCCESS
 }
 

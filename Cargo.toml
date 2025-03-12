@@ -11,7 +11,9 @@ edition = "2021"
 
 [dependencies]
 env_logger = "0.11.6"
+futures = "0.3.31"
 log = "0.4.26"
+tokio = { version = "1.44.0", features = ["macros", "rt-multi-thread"] }
 wgpu = "24.0.1"
 winit = "0.30.9"
 
@@ -159,7 +161,7 @@ implicit_clone = "warn"
 implicit_hasher = "warn"
 # implicit_return = "warn"
 imprecise_flops = "warn"
-inconsistent_struct_constructor = "warn"
+# inconsistent_struct_constructor = "warn"
 index_refutable_slice = "warn"
 indexing_slicing = "warn"
 inefficient_to_string = "warn"
