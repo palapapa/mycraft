@@ -5,6 +5,7 @@ use futures::executor::block_on;
 use log::{error, info};
 use tokio::task::block_in_place;
 use winit::application::ApplicationHandler;
+use winit::dpi::PhysicalSize;
 use winit::error::OsError;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
@@ -12,8 +13,10 @@ use winit::event::WindowEvent::{self, *};
 use wgpu::{Backends,
     CompositeAlphaMode,
     CreateSurfaceError,
-    Device, DeviceDescriptor,
-    Instance, InstanceDescriptor,
+    Device,
+    DeviceDescriptor,
+    Instance,
+    InstanceDescriptor,
     InstanceFlags,
     PresentMode,
     Queue,
@@ -132,6 +135,14 @@ impl App<'_> {
         });
         Ok(())
     }
+
+    fn resize(&mut self, new_size: PhysicalSize<u32>) {
+        if let Some(internal_fields) = self.internal_fields.as_mut() {
+            internal_fields.surface_config.width = new_size.width;
+            internal_fields.surface_config.height = new_size.height;
+            internal_fields.surface.configure(&internal_fields.device, &internal_fields.surface_config);
+        }
+    }
 }
 
 impl ApplicationHandler for App<'_> {
@@ -140,6 +151,7 @@ impl ApplicationHandler for App<'_> {
             info!("The window with ID {} is resuming.", u64::from(internal_fields.window.id()));
             return;
         }
+        // If `resumed` is called for the first time.
         match block_in_place(|| block_on(self.initialize(event_loop))) {
             Ok(()) => {
                 info!("The window has been initialized.");
@@ -157,6 +169,9 @@ impl ApplicationHandler for App<'_> {
         event: WindowEvent,
     ) {
         match event {
+            Resized(new_size) => {
+                self.resize(new_size);
+            },
             CloseRequested => {
                 info!("The window with ID {} is exiting.", u64::from(window_id));
                 event_loop.exit();
@@ -175,6 +190,11 @@ struct AppInternalFields<'a> {
     /// <https://github.com/gfx-rs/wgpu/pull/1792>.
     surface: Surface<'a>,
     /// <https://www.reddit.com/r/rust/comments/1csjakb/comment/l45os9v>
+    /// 
+    /// This also cannot be a owned [`Window`], because [`Self::surface`] holds
+    /// a reference to this, but is created in the same scope as this. If this
+    /// were a owned [`Window`] you would get a "borrowed data escapes outside
+    /// of ..." error.
     window: Arc<Window>,
     surface_config: SurfaceConfiguration,
     device: Device,
