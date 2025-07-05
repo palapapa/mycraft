@@ -1,10 +1,10 @@
 mod application_handler;
 
-use std::process::ExitCode;
-use application_handler::App;
-use env_logger::{Builder, Env};
-use log::{info, error};
-use winit::event_loop::{ControlFlow, EventLoop};
+use std::process::*;
+use application_handler::*;
+use env_logger::*;
+use log::*;
+use winit::event_loop::*;
 
 #[tokio::main]
 async fn main() -> ExitCode {

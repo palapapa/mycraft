@@ -1,16 +1,16 @@
 use std::fmt::Debug;
-use std::iter::once;
-use std::sync::Arc;
-use futures::executor::block_on;
-use log::{error, info};
+use std::iter::*;
+use std::sync::*;
+use futures::executor::*;
+use log::*;
 use tokio::task::block_in_place;
-use winit::application::ApplicationHandler;
-use winit::dpi::PhysicalSize;
-use winit::error::OsError;
-use winit::event_loop::ActiveEventLoop;
-use winit::window::{Window, WindowId};
+use winit::application::*;
+use winit::dpi::*;
+use winit::error::*;
+use winit::event_loop::*;
+use winit::window::*;
 use winit::event::WindowEvent::{self, *};
-use wgpu::{Backends, Color, CommandEncoderDescriptor, CompositeAlphaMode, CreateSurfaceError, Device, DeviceDescriptor, Instance, InstanceDescriptor, InstanceFlags, LoadOp, Operations, PresentMode, Queue, RenderPassColorAttachment, RenderPassDescriptor, RequestAdapterError, RequestAdapterOptions, RequestDeviceError, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
+use wgpu::*;
 use wgpu::PowerPreference::HighPerformance;
 
 /// An implementation of [`ApplicationHandler`] that manages the states of the app and the GPU.
