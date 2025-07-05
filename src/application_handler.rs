@@ -10,30 +10,7 @@ use winit::error::OsError;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 use winit::event::WindowEvent::{self, *};
-use wgpu::{Backends,
-    Color,
-    CommandEncoderDescriptor,
-    CompositeAlphaMode,
-    CreateSurfaceError,
-    Device,
-    DeviceDescriptor,
-    Instance,
-    InstanceDescriptor,
-    InstanceFlags,
-    LoadOp,
-    Operations,
-    PresentMode,
-    Queue,
-    RenderPassColorAttachment,
-    RenderPassDescriptor,
-    RequestAdapterOptions,
-    RequestDeviceError,
-    StoreOp,
-    Surface,
-    SurfaceConfiguration,
-    SurfaceError,
-    TextureUsages,
-    TextureViewDescriptor};
+use wgpu::{Backends, Color, CommandEncoderDescriptor, CompositeAlphaMode, CreateSurfaceError, Device, DeviceDescriptor, Instance, InstanceDescriptor, InstanceFlags, LoadOp, Operations, PresentMode, Queue, RenderPassColorAttachment, RenderPassDescriptor, RequestAdapterError, RequestAdapterOptions, RequestDeviceError, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
 use wgpu::PowerPreference::HighPerformance;
 
 /// An implementation of [`ApplicationHandler`] that manages the states of the app and the GPU.
@@ -64,7 +41,7 @@ impl App<'_> {
                 Arc::new(window)
             },
             Err(err) => {
-                error!("Could not create the window. Error: {err:#?}");
+                error!("Could not create the window. {err:#?}");
                 return Err(AppInitializationError::Os(err));
             }
         };
@@ -75,35 +52,38 @@ impl App<'_> {
         });
         let surface = match wgpu_instance.create_surface(Arc::clone(&window)) {
             Ok(surface) => {
-                info!("The surface has been created.");
+                info!("The surface has been created. {surface:#?}");
                 surface
             },
             Err(err) => {
-                error!("Could not create the surface. Error: {err:#?}");
+                error!("Could not create the surface. {err:#?}");
                 return Err(AppInitializationError::CreateSurface(err));
             }
         };
-        let adapter = if let Some(adapter) = wgpu_instance.request_adapter(&RequestAdapterOptions {
+        let adapter = match wgpu_instance.request_adapter(&RequestAdapterOptions {
             power_preference: HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false
         }).await {
-            info!("The adapter has been created.");
-            adapter
-        } else {
-            error!("The adapter could not be created.");
-            return Err(AppInitializationError::CreateAdapter);
+            Ok(adapter) => {
+                info!("The adapter has been created. {adapter:#?}");
+                adapter
+            }
+            Err(err) => {
+                error!("The adapter could not be created. {err:#?}");
+                return Err(AppInitializationError::RequestAdapter(err));
+            }
         };
         let (device, command_queue) = match adapter.request_device(&DeviceDescriptor {
             label: Some("default-device"),
             ..Default::default()
-        }, None).await {
+        }).await {
             Ok(val) => {
-                info!("The device and command queue has been created.");
+                info!("The device and command queue has been created. {:#?}, {:#?}", val.0, val.1);
                 val
             },
             Err(err) => {
-                error!("The device and command queue could not be created. Error: {err:#?}");
+                error!("The device and command queue could not be created. {err:#?}");
                 return Err(AppInitializationError::RequestDevice(err));
             }
         };
@@ -161,7 +141,7 @@ impl App<'_> {
         let output_surface_texture = match internal_fields.surface.get_current_texture() {
             Ok(output_surface_texture) => output_surface_texture,
             Err(err) => {
-                error!("`get_current_texture` failed when rendering. Error: {err:#?}");
+                error!("`get_current_texture` failed when rendering. {err:#?}");
                 return Err(err)
             }
         };
@@ -202,7 +182,7 @@ impl ApplicationHandler for App<'_> {
                 info!("The window has been initialized.");
             },
             Err(err) => {
-                error!("Failed to initialize the window. Error: {err:#?}");
+                error!("Failed to initialize the window. {err:#?}");
             }
         }
     }
@@ -254,7 +234,7 @@ struct AppInternalFields<'a> {
 enum AppInitializationError {
     Os(OsError),
     CreateSurface(CreateSurfaceError),
-    CreateAdapter,
     RequestDevice(RequestDeviceError),
-    CreateSurfaceTextureFormat
+    CreateSurfaceTextureFormat,
+    RequestAdapter(RequestAdapterError)
 }
