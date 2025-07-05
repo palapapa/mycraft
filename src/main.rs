@@ -13,7 +13,7 @@ async fn main() -> ExitCode {
     let event_loop = match EventLoop::new() {
         Ok(event_loop) => event_loop,
         Err(err) => {
-            error!("Could not create the event loop. Error: {err}");
+            error!("Could not create the event loop. Error: {err:#?}");
             return ExitCode::FAILURE;
         }
     };
@@ -22,7 +22,7 @@ async fn main() -> ExitCode {
     match event_loop.run_app(&mut app) {
         Ok(()) => (),
         Err(err) => {
-            error!("The event loop terminated abnormally. Error: {err}");
+            error!("The event loop terminated abnormally. Error: {err:#?}");
             return ExitCode::FAILURE;
         }
     }
