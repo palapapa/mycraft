@@ -1,3 +1,5 @@
+use egui::Window as EguiWindow;
+use egui_wgpu::*;
 use std::fmt::Debug;
 use std::iter::*;
 use std::sync::*;
@@ -12,6 +14,7 @@ use winit::window::*;
 use winit::event::WindowEvent::{self, *};
 use wgpu::*;
 use wgpu::PowerPreference::HighPerformance;
+use crate::egui_renderer::*;
 
 /// An implementation of [`ApplicationHandler`] that manages the states of the app and the GPU.
 #[derive(Default)]
@@ -34,60 +37,102 @@ impl App<'_> {
         if self.internal_fields.is_some() {
             return Ok(());
         }
+        let window = Self::create_window(event_loop)?;
+        let wgpu_instance = Self::create_instance();
+        let surface = Self::create_surface(&wgpu_instance, Arc::clone(&window))?;
+        let adapter = Self::create_adapter(&wgpu_instance, &surface).await?;
+        let (device, command_queue) = Self::create_device_and_queue(&adapter).await?;
+        let surface_config = Self::create_surface_config(&surface, &adapter, &window)?;
+        surface.configure(&device, &surface_config);
+        info!("Surface configured.");
+        let egui_renderer = EguiRenderer::new(&EguiRendererDescriptor {
+            device: &device,
+            msaa_samples: 1,
+            output_color_format: surface_config.format,
+            output_depth_format: None,
+            window: window.as_ref()
+        });
+        self.internal_fields = Some(AppInternalFields {
+            command_queue,
+            device,
+            surface,
+            surface_config,
+            window,
+            egui_renderer
+        });
+        Ok(())
+    }
+
+    fn create_window(event_loop: &ActiveEventLoop) -> Result<Arc<Window>, AppInitializationError> {
         let window_attributes = Window::default_attributes().with_title("Mycraft");
-        let window = match event_loop.create_window(window_attributes) {
+        match event_loop.create_window(window_attributes) {
             Ok(window) => {
                 info!("The window with ID {} has been created.", u64::from(window.id()));
-                Arc::new(window)
+                Ok(Arc::new(window))
             },
             Err(err) => {
                 error!("Could not create the window. {err:#?}");
-                return Err(AppInitializationError::Os(err));
+                Err(AppInitializationError::Os(err))
             }
-        };
-        let wgpu_instance = Instance::new(&InstanceDescriptor {
+        }
+    }
+
+    fn create_instance() -> Instance {
+        Instance::new(&InstanceDescriptor {
             backends: Backends::PRIMARY,
             flags: InstanceFlags::from_env_or_default(),
             ..Default::default()
-        });
-        let surface = match wgpu_instance.create_surface(Arc::clone(&window)) {
+        })
+    }
+
+    fn create_surface<'window>(instance: &Instance, window: impl Into<SurfaceTarget<'window>>) -> Result<Surface<'window>, AppInitializationError> {
+        match instance.create_surface(window) {
             Ok(surface) => {
                 info!("The surface has been created. {surface:#?}");
-                surface
+                Ok(surface)
             },
             Err(err) => {
                 error!("Could not create the surface. {err:#?}");
-                return Err(AppInitializationError::CreateSurface(err));
+                Err(AppInitializationError::CreateSurface(err))
             }
-        };
-        let adapter = match wgpu_instance.request_adapter(&RequestAdapterOptions {
+        }
+    }
+
+    async fn create_adapter(instance: &Instance, surface: &Surface<'_>) -> Result<Adapter, AppInitializationError> {
+        match instance.request_adapter(&RequestAdapterOptions {
             power_preference: HighPerformance,
-            compatible_surface: Some(&surface),
+            compatible_surface: Some(surface),
             force_fallback_adapter: false
         }).await {
             Ok(adapter) => {
                 info!("The adapter has been created. {adapter:#?}");
-                adapter
+                Ok(adapter)
             }
             Err(err) => {
                 error!("The adapter could not be created. {err:#?}");
-                return Err(AppInitializationError::RequestAdapter(err));
+                Err(AppInitializationError::RequestAdapter(err))
             }
-        };
-        let (device, command_queue) = match adapter.request_device(&DeviceDescriptor {
+        }
+    }
+
+    async fn create_device_and_queue(adapter: &Adapter) -> Result<(Device, Queue), AppInitializationError> {
+        match adapter.request_device(&DeviceDescriptor {
             label: Some("default-device"),
             ..Default::default()
         }).await {
             Ok(val) => {
                 info!("The device and command queue has been created. {:#?}, {:#?}", val.0, val.1);
-                val
+                Ok(val)
             },
             Err(err) => {
                 error!("The device and command queue could not be created. {err:#?}");
-                return Err(AppInitializationError::RequestDevice(err));
+                Err(AppInitializationError::RequestDevice(err))
             }
-        };
-        let surface_capabilities = surface.get_capabilities(&adapter);
+        }
+    }
+
+    fn create_surface_config(surface: &Surface<'_>, adapter: &Adapter, window: &Window) -> Result<SurfaceConfiguration, AppInitializationError> {
+        let surface_capabilities = surface.get_capabilities(adapter);
         if surface_capabilities.formats.is_empty() {
             error!("The surface format could not be determined because the surface is incompatible with the adapter.");
             return Err(AppInitializationError::CreateSurfaceTextureFormat);
@@ -109,7 +154,7 @@ impl App<'_> {
         let surface_usages = TextureUsages::RENDER_ATTACHMENT;
         info!("Supported surface usages: {:#?}", surface_capabilities.usages);
         info!("The surface usages {surface_usages:#?} have been chosen.");
-        let surface_config = SurfaceConfiguration {
+        Ok(SurfaceConfiguration {
             alpha_mode,
             desired_maximum_frame_latency: 2,
             format: surface_format,
@@ -118,15 +163,7 @@ impl App<'_> {
             present_mode,
             usage: surface_usages,
             view_formats: vec![]
-        };
-        self.internal_fields = Some(AppInternalFields {
-            command_queue,
-            device,
-            surface,
-            surface_config,
-            window
-        });
-        Ok(())
+        })
     }
 
     fn resize(&mut self, new_size: PhysicalSize<u32>) {
@@ -134,10 +171,11 @@ impl App<'_> {
         internal_fields.surface_config.width = new_size.width;
         internal_fields.surface_config.height = new_size.height;
         internal_fields.surface.configure(&internal_fields.device, &internal_fields.surface_config);
+        info!("Resized the window to {new_size:#?}");
     }
 
-    fn render(&self) -> Result<(), SurfaceError> {
-        let Some(internal_fields) = self.internal_fields.as_ref() else { return Ok(()); };
+    fn render(&mut self) -> Result<(), SurfaceError> {
+        let Some(internal_fields) = self.internal_fields.as_mut() else { return Ok(()); };
         let output_surface_texture = match internal_fields.surface.get_current_texture() {
             Ok(output_surface_texture) => output_surface_texture,
             Err(err) => {
@@ -152,7 +190,7 @@ impl App<'_> {
         let mut command_encoder = internal_fields.device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("main-command-encoder")
         });
-        command_encoder.begin_render_pass(&RenderPassDescriptor {
+        let mut render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("main-render-pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
                 view: &output_surface_texture_view,
@@ -163,8 +201,32 @@ impl App<'_> {
                 }
             })],
             ..Default::default()
-        });
+        }).forget_lifetime();
+        internal_fields.egui_renderer.draw_ui(&mut UiDrawingDescriptor {
+            window: &internal_fields.window,
+            device: &internal_fields.device,
+            queue: &internal_fields.command_queue,
+            command_encoder: &mut command_encoder,
+            render_pass: &mut render_pass,
+            screen_descriptor: &ScreenDescriptor {
+                size_in_pixels: [internal_fields.window.inner_size().width, internal_fields.window.inner_size().height],
+                #[expect(clippy::cast_possible_truncation, reason = "pixels_per_point wants a f32.")]
+                pixels_per_point: internal_fields.window.scale_factor() as f32
+            }},
+            |egui_context| {
+                EguiWindow::new("Hello, World!")
+                    .vscroll(true)
+                    .show(
+                        egui_context,
+                        |ui| {
+                            ui.label("Hello, Label!");
+                        }
+                    );
+            }
+        );
+        drop(render_pass); // So that command_encoder.finish compiles, because render_pass can't outlive command_encoder.
         internal_fields.command_queue.submit(once(command_encoder.finish()));
+        internal_fields.window.pre_present_notify();
         output_surface_texture.present();
         Ok(())
     }
@@ -183,21 +245,23 @@ impl ApplicationHandler for App<'_> {
             },
             Err(err) => {
                 error!("Failed to initialize the window. {err:#?}");
+                event_loop.exit();
             }
         }
     }
 
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        window_id: WindowId,
-        event: WindowEvent,
-    ) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+        let Some(internal_fields) = self.internal_fields.as_mut() else { return; };
+        let event_response = internal_fields.egui_renderer.handle_event(&internal_fields.window, &event);
+        if event_response.consumed {
+            return;
+        }
         match event {
             Resized(new_size) => {
                 self.resize(new_size);
-            },
+            }
             RedrawRequested => {
+                internal_fields.window.request_redraw(); // Can't be below self.render because that would create two mutable references.
                 _ = self.render();
             }
             CloseRequested => {
@@ -217,6 +281,11 @@ struct AppInternalFields<'a> {
     /// before it in order to not cause a segfault. See
     /// <https://github.com/gfx-rs/wgpu/pull/1792>.
     surface: Surface<'a>,
+    surface_config: SurfaceConfiguration,
+    /// This has to be declared before [`Self::window`] and [`Self::device`]
+    /// because if this is dropped before them, the app will segfault. See
+    /// <https://github.com/emilk/egui/issues/7369>.
+    egui_renderer: EguiRenderer,
     /// <https://www.reddit.com/r/rust/comments/1csjakb/comment/l45os9v>
     /// 
     /// This also cannot be a owned [`Window`], because [`Self::surface`] holds
@@ -224,7 +293,6 @@ struct AppInternalFields<'a> {
     /// were a owned [`Window`] you would get a "borrowed data escapes outside
     /// of ..." error.
     window: Arc<Window>,
-    surface_config: SurfaceConfiguration,
     device: Device,
     command_queue: Queue
 }

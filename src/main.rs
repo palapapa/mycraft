@@ -1,4 +1,6 @@
 mod application_handler;
+mod egui_renderer;
+mod shaders;
 
 use std::process::*;
 use application_handler::*;
