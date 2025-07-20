@@ -1,12 +1,14 @@
 mod application_handler;
 mod egui_renderer;
 mod shaders;
+mod ui_renderer;
 
 use std::process::*;
 use application_handler::*;
 use env_logger::*;
 use log::*;
 use winit::event_loop::*;
+use crate::ui_renderer::*;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -20,7 +22,8 @@ async fn main() -> ExitCode {
         }
     };
     event_loop.set_control_flow(ControlFlow::Poll);
-    let mut app = App::default();
+    let ui_renderers: Vec<Box<dyn UiRenderer>> = vec![Box::new(DefaultUiRenderer)];
+    let mut app = App::new(ui_renderers);
     match event_loop.run_app(&mut app) {
         Ok(()) => (),
         Err(err) => {

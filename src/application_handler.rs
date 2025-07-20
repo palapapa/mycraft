@@ -1,4 +1,3 @@
-use egui::Window as EguiWindow;
 use egui_wgpu::*;
 use std::fmt::Debug;
 use std::iter::*;
@@ -15,17 +14,27 @@ use winit::event::WindowEvent::{self, *};
 use wgpu::*;
 use wgpu::PowerPreference::HighPerformance;
 use crate::egui_renderer::*;
+use crate::ui_renderer::*;
 
 /// An implementation of [`ApplicationHandler`] that manages the states of the app and the GPU.
-#[derive(Default)]
 pub struct App<'a> {
-    /// Because if these fields were placed in [`App`] directly, they would all have
-    /// to be [`Option`]s, and all either be [`Some`] of [`None`] at the same time.
-    /// So [`Option<AppInternalFields<'a>>`] is used in it instead.
-    internal_fields: Option<AppInternalFields<'a>>
+    /// Because the fields in [`AppInternalFields`] can only be initialized
+    /// inside [`ApplicationHandler::resumed`], if those fields were placed in
+    /// [`App`] directly, they would all have to be [`Option`]s, and all either
+    /// be [`Some`] of [`None`] at the same time. So
+    /// [`Option<AppInternalFields<'a>>`] is used in it instead.
+    internal_fields: Option<AppInternalFields<'a>>,
+    ui_renderers: Vec<Box<dyn UiRenderer>>
 }
 
 impl App<'_> {
+    pub fn new(ui_renderers: Vec<Box<dyn UiRenderer>>) -> Self {
+        Self {
+            internal_fields: None,
+            ui_renderers
+        }
+    }
+    
     /// Initializes the fields inside [`Self::internal_fields`]. Does nothing if
     /// called multiple times after succeeding.
     /// 
@@ -202,7 +211,7 @@ impl App<'_> {
             })],
             ..Default::default()
         }).forget_lifetime();
-        internal_fields.egui_renderer.draw_ui(&mut UiDrawingDescriptor {
+        internal_fields.egui_renderer.render_ui(&mut UiDrawingDescriptor {
             window: &internal_fields.window,
             device: &internal_fields.device,
             queue: &internal_fields.command_queue,
@@ -213,18 +222,9 @@ impl App<'_> {
                 #[expect(clippy::cast_possible_truncation, reason = "pixels_per_point wants a f32.")]
                 pixels_per_point: internal_fields.window.scale_factor() as f32
             }},
-            |egui_context| {
-                EguiWindow::new("Hello, World!")
-                    .vscroll(true)
-                    .show(
-                        egui_context,
-                        |ui| {
-                            ui.label("Hello, Label!");
-                        }
-                    );
-            }
+            &mut self.ui_renderers
         );
-        drop(render_pass); // So that command_encoder.finish compiles, because render_pass can't outlive command_encoder.
+        drop(render_pass); // Remember to drop because of the forget_lifetime above; otherwise wgpu panics!!!
         internal_fields.command_queue.submit(once(command_encoder.finish()));
         internal_fields.window.pre_present_notify();
         output_surface_texture.present();

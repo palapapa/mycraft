@@ -1,12 +1,15 @@
 use egui::*;
 use egui_wgpu::*;
 use egui_winit::*;
+use crate::ui_renderer::*;
 use wgpu::*;
 use winit::window::{Window, Theme};
 use winit::event::*;
 
-/// Handles everything related to drawing the UI using [`egui`]. Inspired by
-/// <https://github.com/kaphula/winit-egui-wgpu-template>.
+/// Handles the lower level details of drawing the UI using [`egui`]. For the
+/// actual UI drawers, see [`crate::ui_renderer`].
+/// 
+/// Inspired by <https://github.com/kaphula/winit-egui-wgpu-template>.
 pub struct EguiRenderer {
     state: State,
     renderer: Renderer
@@ -36,10 +39,16 @@ impl EguiRenderer {
     ///   lifetime be `'static`, so you must call
     ///   [`RenderPass::forget_lifetime`] on
     ///   [`UiDrawingDescriptor::render_pass`] before passing.
-    pub fn draw_ui(&mut self, ui_drawing_descriptor: &mut UiDrawingDescriptor<'_>, ui_code: impl FnMut(&Context)) {
+    pub fn render_ui(&mut self, ui_drawing_descriptor: &mut UiDrawingDescriptor<'_>, ui_renderers: &mut [Box<dyn UiRenderer>]) {
         let &mut UiDrawingDescriptor { window, device, queue, ref mut command_encoder, ref mut render_pass, screen_descriptor } = ui_drawing_descriptor;
+        self.state.egui_ctx().set_pixels_per_point(screen_descriptor.pixels_per_point);
         let raw_input = self.state.take_egui_input(window);
-        let full_output = self.state.egui_ctx().run(raw_input, ui_code);
+        let drawing_closure = |context: &Context| { // The explicit parameter type is required here; otherwise it causes the "implementation is not general enough" error
+            for ui_renderer in &mut *ui_renderers { // The manual reborrow is required here
+                ui_renderer.draw_ui(context);
+            }
+        };
+        let full_output = self.state.egui_ctx().run(raw_input, drawing_closure);
         self.state.handle_platform_output(window, full_output.platform_output);
         let primitives = self.state.egui_ctx().tessellate(full_output.shapes, self.state.egui_ctx().pixels_per_point());
         for (id, image_delta) in full_output.textures_delta.set {
