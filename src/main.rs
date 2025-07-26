@@ -2,6 +2,7 @@ mod application_handler;
 mod egui_renderer;
 mod shaders;
 mod ui_renderer;
+mod ui_state;
 
 use std::process::*;
 use application_handler::*;

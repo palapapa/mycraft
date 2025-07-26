@@ -2,12 +2,13 @@ use egui::*;
 use egui_wgpu::*;
 use egui_winit::*;
 use crate::ui_renderer::*;
+use crate::ui_state::*;
 use wgpu::*;
 use winit::window::{Window, Theme};
 use winit::event::*;
 
-/// Handles the lower level details of drawing the UI using [`egui`]. For the
-/// actual UI drawers, see [`crate::ui_renderer`].
+/// Handles the lower level details of rendering the UI using [`egui`]. For the
+/// actual UI renderers, see [`crate::ui_renderer`].
 /// 
 /// Inspired by <https://github.com/kaphula/winit-egui-wgpu-template>.
 pub struct EguiRenderer {
@@ -35,20 +36,29 @@ impl EguiRenderer {
         }
     }
 
-    /// * `ui_drawing_descriptor`: [`Renderer::render`] requires that the
+    /// * `ui_rendering_descriptor`: [`Renderer::render`] requires that the
     ///   lifetime be `'static`, so you must call
     ///   [`RenderPass::forget_lifetime`] on
-    ///   [`UiDrawingDescriptor::render_pass`] before passing.
-    pub fn render_ui(&mut self, ui_drawing_descriptor: &mut UiDrawingDescriptor<'_>, ui_renderers: &mut [Box<dyn UiRenderer>]) {
-        let &mut UiDrawingDescriptor { window, device, queue, ref mut command_encoder, ref mut render_pass, screen_descriptor } = ui_drawing_descriptor;
+    ///   [`UiRenderingDescriptor::render_pass`] before passing.
+    /// 
+    ///   The `'static` in the type of [`UiRenderingDescriptor::ui_renderers`]
+    ///   exists because the type of [`crate::App::ui_renderers`] is
+    ///   `Vec<Box<dyn UiRenderer>>`, which is the same as `Vec<Box<dyn
+    ///   UiRenderer + 'static>>` because of the lifetime elision rules.  Since
+    ///   `&'a mut T` is invariant over `T` (see
+    ///   [Rustonomicon](https://doc.rust-lang.org/nomicon/subtyping.html)), it
+    ///   has to be `'static` when it's passed to here as well.
+    pub fn render_ui(&mut self, ui_rendering_descriptor: &mut UiRenderingDescriptor<'_>) {
+        // The immutable references don't need `ref mut` because immutable references are Copy.
+        let &mut UiRenderingDescriptor { window, device, queue, ref mut command_encoder, ref mut render_pass, screen_descriptor, ref mut ui_renderers, ref mut ui_state } = ui_rendering_descriptor;
         self.state.egui_ctx().set_pixels_per_point(screen_descriptor.pixels_per_point);
         let raw_input = self.state.take_egui_input(window);
-        let drawing_closure = |context: &Context| { // The explicit parameter type is required here; otherwise it causes the "implementation is not general enough" error
-            for ui_renderer in &mut *ui_renderers { // The manual reborrow is required here
-                ui_renderer.draw_ui(context);
+        let rendering_closure = |context: &Context| { // The explicit parameter type is required here; otherwise it causes the "implementation is not general enough" error
+            for ui_renderer in &mut **ui_renderers { // The manual reborrow is required here
+                ui_renderer.render_ui(context, *ui_state);
             }
         };
-        let full_output = self.state.egui_ctx().run(raw_input, drawing_closure);
+        let full_output = self.state.egui_ctx().run(raw_input, rendering_closure);
         self.state.handle_platform_output(window, full_output.platform_output);
         let primitives = self.state.egui_ctx().tessellate(full_output.shapes, self.state.egui_ctx().pixels_per_point());
         for (id, image_delta) in full_output.textures_delta.set {
@@ -82,11 +92,13 @@ pub struct EguiRendererDescriptor<'a> {
     pub msaa_samples: u32
 }
 
-pub struct UiDrawingDescriptor<'a> {
+pub struct UiRenderingDescriptor<'a> {
     pub window: &'a Window,
     pub device: &'a Device,
     pub queue: &'a Queue,
     pub command_encoder: &'a mut CommandEncoder,
     pub render_pass: &'a mut RenderPass<'static>,
-    pub screen_descriptor: &'a ScreenDescriptor
+    pub screen_descriptor: &'a ScreenDescriptor,
+    pub ui_renderers: &'a mut [&'a mut (dyn UiRenderer + 'static)],
+    pub ui_state: &'a mut dyn UiState
 }
