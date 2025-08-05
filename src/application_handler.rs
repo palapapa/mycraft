@@ -1,3 +1,6 @@
+use bevy_ecs::schedule::*;
+use bevy_ecs::system::*;
+use bevy_ecs::world::*;
 use egui_wgpu::*;
 use std::fmt::Debug;
 use std::iter::*;
@@ -12,41 +15,41 @@ use winit::event_loop::*;
 use winit::window::*;
 use winit::event::WindowEvent::{self, *};
 use wgpu::*;
-use wgpu::PowerPreference::HighPerformance;
+use crate::bevy_components::egui::*;
+use crate::bevy_resources::egui::*;
+use crate::bevy_resources::wgpu::*;
+use crate::bevy_resources::winit::*;
+use crate::bevy_schedules::*;
 use crate::egui_renderer::*;
-use crate::ui_renderer::*;
-use crate::ui_state::*;
+use crate::egui_state::*;
 
 /// An implementation of [`ApplicationHandler`] that manages the states of the app and the GPU.
-pub struct App<'window> {
-    /// Because the fields in [`AppInternalFields`] can only be initialized
-    /// inside [`ApplicationHandler::resumed`], if those fields were placed in
-    /// [`App`] directly, they would all have to be [`Option`]s, and all either
-    /// be [`Some`] of [`None`] at the same time. So
-    /// [`Option<AppInternalFields<'a>>`] is used in it instead.
-    internal_fields: Option<AppInternalFields<'window>>,
-    ui_renderers: Vec<Box<dyn UiRenderer>>,
-    ui_state: Box<dyn UiState>
+pub struct App {
+    world: World,
+    startup_schedule: Schedule,
+    main_schedule: Schedule,
+    is_initialized: bool
 }
 
-impl App<'_> {
-    pub fn new(ui_renderers: Vec<Box<dyn UiRenderer>>) -> Self {
+impl App {
+    pub fn new() -> Self {
         Self {
-            internal_fields: None,
-            ui_renderers,
-            ui_state: Box::new(DefaultUiState::new())
+            world: Self::create_main_world(),
+            startup_schedule: StartupSchedule::create_schedule(),
+            main_schedule: MainSchedule::create_schedule(),
+            is_initialized: false
         }
     }
     
-    /// Initializes the fields inside [`Self::internal_fields`]. Does nothing if
-    /// called multiple times after succeeding.
+    /// Initializes the fields inside this `struct` and the ECS. Does nothing if
+    /// called multiple times after succeeding. This should be called in
+    /// [`ApplicationHandler::resumed`].
     /// 
     /// * `event_loop`: The [`ActiveEventLoop`] provided by
-    ///   [`ApplicationHandler::resumed`] used to create a [`Window`] to store
-    ///   inside [`Self::internal_fields`].
+    ///   [`ApplicationHandler::resumed`] used to create a [`Window`].
     #[expect(clippy::future_not_send, reason = "This function is currently only called using block_on.")]
     async fn initialize(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppInitializationError> {
-        if self.internal_fields.is_some() {
+        if self.is_initialized {
             return Ok(());
         }
         let window = Self::create_window(event_loop)?;
@@ -57,21 +60,10 @@ impl App<'_> {
         let surface_config = Self::create_surface_config(&surface, &adapter, &window)?;
         surface.configure(&device, &surface_config);
         info!("Surface configured.");
-        let egui_renderer = EguiRenderer::new(&EguiRendererDescriptor {
-            device: &device,
-            msaa_samples: 1,
-            output_color_format: surface_config.format,
-            output_depth_format: None,
-            window: window.as_ref()
-        });
-        self.internal_fields = Some(AppInternalFields {
-            command_queue,
-            device,
-            surface,
-            surface_config,
-            window,
-            egui_renderer
-        });
+        self.world.insert_resource(WgpuResource { command_queue, surface, surface_config, device });
+        self.world.insert_resource(WinitResource { window });
+        self.startup_schedule.run(&mut self.world);
+        self.is_initialized = true;
         Ok(())
     }
 
@@ -112,7 +104,7 @@ impl App<'_> {
 
     async fn create_adapter(instance: &Instance, surface: &Surface<'_>) -> Result<Adapter, AppInitializationError> {
         match instance.request_adapter(&RequestAdapterOptions {
-            power_preference: HighPerformance,
+            power_preference: PowerPreference::HighPerformance,
             compatible_surface: Some(surface),
             force_fallback_adapter: false
         }).await {
@@ -178,31 +170,48 @@ impl App<'_> {
         })
     }
 
+    fn create_main_world() -> World {
+        let mut world = World::new();
+        Self::add_egui_entities_and_resources(&mut world);
+        world
+    }
+
+    fn add_egui_entities_and_resources(world: &mut World) {
+        world.spawn(EguiRendererComponent { renderer: Box::new(DefaultEguiRenderer) });
+        world.insert_resource(EguiStateResource { egui_state: Box::new(DefaultEguiState::new()) });
+    }
+
     fn resize(&mut self, new_size: PhysicalSize<u32>) {
-        let Some(internal_fields) = self.internal_fields.as_mut() else { return; };
-        internal_fields.surface_config.width = new_size.width;
-        internal_fields.surface_config.height = new_size.height;
-        internal_fields.surface.configure(&internal_fields.device, &internal_fields.surface_config);
+        if !self.is_initialized {
+            return;
+        }
+        let wgpu_resource: &mut WgpuResource = &mut self.world.resource_mut();
+        wgpu_resource.surface_config.width = new_size.width;
+        wgpu_resource.surface_config.height = new_size.height;
+        wgpu_resource.surface.configure(&wgpu_resource.device, &wgpu_resource.surface_config);
         info!("Resized the window to {new_size:#?}");
     }
 
-    fn render(&mut self) -> Result<(), SurfaceError> {
-        let Some(internal_fields) = self.internal_fields.as_mut() else { return Ok(()); };
-        let output_surface_texture = match internal_fields.surface.get_current_texture() {
+    fn render(&mut self) -> Result<(), RenderError> {
+        if !self.is_initialized {
+            return Ok(());
+        }
+        let wgpu_resource: &WgpuResource = self.world.resource();
+        let output_surface_texture = match wgpu_resource.surface.get_current_texture() {
             Ok(output_surface_texture) => output_surface_texture,
             Err(err) => {
                 error!("`get_current_texture` failed when rendering. {err:#?}");
-                return Err(err)
+                return Err(RenderError::Surface(err))
             }
         };
         let output_surface_texture_view = output_surface_texture.texture.create_view(&TextureViewDescriptor {
             label: Some("main-surface-texture-view"),
             ..Default::default()
         });
-        let mut command_encoder = internal_fields.device.create_command_encoder(&CommandEncoderDescriptor {
+        let mut command_encoder = wgpu_resource.device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("main-command-encoder")
         });
-        let mut render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor {
+        let render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("main-render-pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
                 view: &output_surface_texture_view,
@@ -213,34 +222,33 @@ impl App<'_> {
                 }
             })],
             ..Default::default()
-        }).forget_lifetime();
-        let mut renderer_references: Vec<&mut dyn UiRenderer> = self.ui_renderers.iter_mut().map(AsMut::as_mut).collect();
-        internal_fields.egui_renderer.render_ui(&mut UiRenderingDescriptor {
-            window: &internal_fields.window,
-            device: &internal_fields.device,
-            queue: &internal_fields.command_queue,
-            command_encoder: &mut command_encoder,
-            render_pass: &mut render_pass,
-            screen_descriptor: &ScreenDescriptor {
-                size_in_pixels: [internal_fields.window.inner_size().width, internal_fields.window.inner_size().height],
-                #[expect(clippy::cast_possible_truncation, reason = "pixels_per_point wants a f32.")]
-                pixels_per_point: internal_fields.window.scale_factor() as f32
-            },
-            ui_renderers: renderer_references.as_mut_slice(),
-            ui_state: self.ui_state.as_mut()}
-        );
-        drop(render_pass); // Remember to drop because of the forget_lifetime above; otherwise wgpu panics!!!
-        internal_fields.command_queue.submit(once(command_encoder.finish()));
-        internal_fields.window.pre_present_notify();
-        output_surface_texture.present();
+        });
+        drop(render_pass); // Drops render_pass so command_encoder can be moved below.
+        // Acquires WgpuResource again. This somehow solves a double mutable
+        // reference error.
+        let wgpu_resource_2: &WgpuResource = self.world.resource();
+        wgpu_resource_2.command_queue.submit(once(command_encoder.finish()));
+        self.world.insert_resource(WgpuFrameResource { output_surface_texture });
+        self.main_schedule.run(&mut self.world);
+        let winit_resource: &WinitResource = self.world.resource();
+        winit_resource.window.pre_present_notify();
+        let returned_output_surface_texture = if let Some(wgpu_frame_resource) = self.world.remove_resource::<WgpuFrameResource>() {
+                wgpu_frame_resource.output_surface_texture
+            }
+            else {
+                error!("Could not retrieve the SurfaceTexture to present after MainSchedule finished.");
+                return Err(RenderError::CouldNotPresent)
+            };
+        returned_output_surface_texture.present();
         Ok(())
     }
 }
 
-impl ApplicationHandler for App<'_> {
+impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if let Some(internal_fields) = self.internal_fields.as_ref() {
-            info!("The window with ID {} is resuming.", u64::from(internal_fields.window.id()));
+        if self.is_initialized {
+            let winit_resource: &WinitResource = self.world.resource();
+            info!("The window with ID {} is resuming.", u64::from(winit_resource.window.id()));
             return;
         }
         // If `resumed` is called for the first time.
@@ -256,8 +264,16 @@ impl ApplicationHandler for App<'_> {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
-        let Some(internal_fields) = self.internal_fields.as_mut() else { return; };
-        let event_response = internal_fields.egui_renderer.handle_event(&internal_fields.window, &event);
+        if !self.is_initialized {
+            return;
+        }
+        // We need to use a SystemSet here to avoid having a mutable and
+        // immutable borrow of self.world at the same time.
+        let mut system_state: SystemState<
+            (Res<'_, EguiRendererResource>,
+            Res<'_, WinitResource>)> = SystemState::new(&mut self.world);
+        let (egui_renderer_resource, winit_resource) = system_state.get(&self.world);
+        let event_response = egui_renderer_resource.handle_event(&winit_resource.window, &event);
         if event_response.consumed {
             return;
         }
@@ -266,7 +282,7 @@ impl ApplicationHandler for App<'_> {
                 self.resize(new_size);
             }
             RedrawRequested => {
-                internal_fields.window.request_redraw(); // Can't be below self.render because that would create two mutable references.
+                winit_resource.window.request_redraw(); // Can't be below self.render because that would create two mutable references.
                 _ = self.render();
             }
             CloseRequested => {
@@ -276,30 +292,20 @@ impl ApplicationHandler for App<'_> {
             _ => {}
         }
     }
-}
 
-/// Because if these fields were placed in [`App`] directly, they would all have
-/// to be [`Option`]s, and all either be [`Some`] of [`None`] at the same time.
-/// So [`Option<AppInternalFields<'a>>`] is used in it instead.
-struct AppInternalFields<'window> {
-    /// This has to be declared before [`Self::window`] so that it is dropped
-    /// before it in order to not cause a segfault. See
-    /// <https://github.com/gfx-rs/wgpu/pull/1792>.
-    surface: Surface<'window>,
-    surface_config: SurfaceConfiguration,
-    /// This has to be declared before [`Self::window`] and [`Self::device`]
-    /// because if this is dropped before them, the app will segfault. See
-    /// <https://github.com/emilk/egui/issues/7369>.
-    egui_renderer: EguiRenderer,
-    /// <https://www.reddit.com/r/rust/comments/1csjakb/comment/l45os9v>
-    /// 
-    /// This also cannot be a owned [`Window`], because [`Self::surface`] holds
-    /// a reference to this, but is created in the same scope as this. If this
-    /// were a owned [`Window`] you would get a "borrowed data escapes outside
-    /// of ..." error.
-    window: Arc<Window>,
-    device: Device,
-    command_queue: Queue
+    fn exiting(&mut self, _: &ActiveEventLoop) {
+        // Removes these three resources in this very particular order to
+        // prevent a segfault.
+        if let Some(egui_renderer_resource) = self.world.remove_resource::<EguiRendererResource>() {
+            drop(egui_renderer_resource);
+        }
+        if let Some(wgpu_resource) = self.world.remove_resource::<WgpuResource>() {
+            drop(wgpu_resource);
+        }
+        if let Some(winit_resource) = self.world.remove_resource::<WinitResource>() {
+            drop(winit_resource);
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -310,4 +316,10 @@ enum AppInitializationError {
     RequestDevice(RequestDeviceError),
     CreateSurfaceTextureFormat,
     RequestAdapter(RequestAdapterError)
+}
+
+#[expect(dead_code, reason = "The tuple variants are currectly unused.")]
+enum RenderError {
+    Surface(SurfaceError),
+    CouldNotPresent
 }
