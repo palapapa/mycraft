@@ -1673,6 +1673,7 @@ dependencies = [
  "futures",
  "include_dir",
  "log",
+ "thiserror 2.0.12",
  "tokio",
  "wgpu",
  "winit",

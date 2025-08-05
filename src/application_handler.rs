@@ -5,6 +5,7 @@ use egui_wgpu::*;
 use std::fmt::Debug;
 use std::iter::*;
 use std::sync::*;
+use thiserror::*;
 use futures::executor::*;
 use log::*;
 use tokio::task::block_in_place;
@@ -283,7 +284,12 @@ impl ApplicationHandler for App {
             }
             RedrawRequested => {
                 winit_resource.window.request_redraw(); // Can't be below self.render because that would create two mutable references.
-                _ = self.render();
+                match self.render() {
+                    Ok(()) => (),
+                    Err(err) => {
+                        error!("Error encountered while rendering. {err:#?}");
+                    }
+                }
             }
             CloseRequested => {
                 info!("The window with ID {} is exiting.", u64::from(window_id));
@@ -308,18 +314,29 @@ impl ApplicationHandler for App {
     }
 }
 
-#[derive(Debug)]
-#[expect(dead_code, reason = "The tuple variants are currectly unused.")]
+#[derive(Error, Debug)]
 enum AppInitializationError {
-    Os(OsError),
-    CreateSurface(CreateSurfaceError),
-    RequestDevice(RequestDeviceError),
+    #[error(transparent)]
+    Os(#[from] OsError),
+
+    #[error(transparent)]
+    CreateSurface(#[from] CreateSurfaceError),
+
+    #[error(transparent)]
+    RequestDevice(#[from] RequestDeviceError),
+
+    #[error("The surface format could not be determined because the surface is incompatible with the adapter.")]
     CreateSurfaceTextureFormat,
-    RequestAdapter(RequestAdapterError)
+
+    #[error(transparent)]
+    RequestAdapter(#[from] RequestAdapterError)
 }
 
-#[expect(dead_code, reason = "The tuple variants are currectly unused.")]
+#[derive(Error, Debug)]
 enum RenderError {
-    Surface(SurfaceError),
+    #[error(transparent)]
+    Surface(#[from] SurfaceError),
+
+    #[error("Could not retrieve the SurfaceTexture to present after MainSchedule finished.")]
     CouldNotPresent
 }
