@@ -16,30 +16,28 @@ use winit::event_loop::*;
 use winit::window::*;
 use winit::event::WindowEvent::{self, *};
 use wgpu::*;
-use crate::bevy_components::egui::*;
 use crate::bevy_resources::egui::*;
 use crate::bevy_resources::wgpu::*;
 use crate::bevy_resources::winit::*;
 use crate::bevy_schedules::*;
-use crate::egui_renderer::*;
-use crate::egui_state::*;
+use crate::bevy_world::*;
 
 /// An implementation of [`ApplicationHandler`] that manages the states of the app and the GPU.
 pub struct App {
     world: World,
     startup_schedule: Schedule,
-    main_schedule: Schedule,
+    update_schedule: Schedule,
     is_initialized: bool
 }
 
 impl App {
-    pub fn new() -> Self {
-        Self {
-            world: Self::create_main_world(),
+    pub fn new() -> Result<Self, WorldInitializationError> {
+        Ok(Self {
+            world: create_main_world()?,
             startup_schedule: StartupSchedule::create_schedule(),
-            main_schedule: MainSchedule::create_schedule(),
+            update_schedule: UpdateSchedule::create_schedule(),
             is_initialized: false
-        }
+        })
     }
     
     /// Initializes the fields inside this `struct` and the ECS. Does nothing if
@@ -111,6 +109,7 @@ impl App {
         }).await {
             Ok(adapter) => {
                 info!("The adapter has been created. {adapter:#?}");
+                info!("Adapter limits: {:#?}", adapter.limits());
                 Ok(adapter)
             }
             Err(err) => {
@@ -123,6 +122,7 @@ impl App {
     async fn create_device_and_queue(adapter: &Adapter) -> Result<(Device, Queue), AppInitializationError> {
         match adapter.request_device(&DeviceDescriptor {
             label: Some("default-device"),
+            required_limits: adapter.limits(),
             ..Default::default()
         }).await {
             Ok(val) => {
@@ -169,17 +169,6 @@ impl App {
             usage: surface_usages,
             view_formats: vec![]
         })
-    }
-
-    fn create_main_world() -> World {
-        let mut world = World::new();
-        Self::add_egui_entities_and_resources(&mut world);
-        world
-    }
-
-    fn add_egui_entities_and_resources(world: &mut World) {
-        world.spawn(EguiRendererComponent { renderer: Box::new(DefaultEguiRenderer) });
-        world.insert_resource(EguiStateResource { egui_state: Box::new(DefaultEguiState::new()) });
     }
 
     fn resize(&mut self, new_size: PhysicalSize<u32>) {
@@ -230,7 +219,7 @@ impl App {
         let wgpu_resource_2: &WgpuResource = self.world.resource();
         wgpu_resource_2.command_queue.submit(once(command_encoder.finish()));
         self.world.insert_resource(WgpuFrameResource { output_surface_texture });
-        self.main_schedule.run(&mut self.world);
+        self.update_schedule.run(&mut self.world);
         let winit_resource: &WinitResource = self.world.resource();
         winit_resource.window.pre_present_notify();
         let returned_output_surface_texture = if let Some(wgpu_frame_resource) = self.world.remove_resource::<WgpuFrameResource>() {

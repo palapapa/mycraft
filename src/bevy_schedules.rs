@@ -2,11 +2,11 @@ use bevy_ecs::schedule::*;
 use crate::bevy_sets::*;
 use crate::bevy_systems::egui::*;
 
-/// The primary [`Schedule`] that this app uses.
+/// The [`Schedule`] that runs every frame.
 #[derive(ScheduleLabel, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MainSchedule;
+pub struct UpdateSchedule;
 
-impl MainSchedule {
+impl UpdateSchedule {
     /// Creates a [`Schedule`] that uses this `struct` as a label and configures
     /// systems and build settings.
     pub fn create_schedule() -> Schedule {

@@ -82,6 +82,9 @@ impl EguiRendererResource {
         // invalidate the command buffer(s) it is used in. However, once we
         // called `wgpu::Queue::submit`, it is up for wgpu to determine how long
         // the underlying gpu resource has to live.
+        //
+        // (Excerpt from
+        // https://github.com/emilk/egui/blob/main/crates/egui-wgpu/src/winit.rs)
         for id in full_output.textures_delta.free {
             self.renderer.free_texture(&id);
         }
