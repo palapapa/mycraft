@@ -2,9 +2,9 @@
 
 use assets_manager::*;
 use bevy_ecs::world::*;
-use crate::bevy_components::egui::*;
-use crate::bevy_resources::core::*;
-use crate::bevy_resources::egui::*;
+use crate::components::egui::*;
+use crate::resources::core::*;
+use crate::resources::egui::*;
 use crate::egui_renderer::*;
 use crate::egui_state::*;
 use log::*;

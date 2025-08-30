@@ -16,11 +16,11 @@ use winit::event_loop::*;
 use winit::window::*;
 use winit::event::WindowEvent::{self, *};
 use wgpu::*;
-use crate::bevy_resources::egui::*;
-use crate::bevy_resources::wgpu::*;
-use crate::bevy_resources::winit::*;
-use crate::bevy_schedules::*;
-use crate::bevy_world::*;
+use crate::resources::egui::*;
+use crate::resources::wgpu::*;
+use crate::resources::winit::*;
+use crate::schedules::*;
+use crate::world::*;
 
 /// An implementation of [`ApplicationHandler`] that manages the states of the app and the GPU.
 pub struct App {

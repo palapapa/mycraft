@@ -2,10 +2,10 @@ use bevy_ecs::system::*;
 use egui_wgpu::*;
 use std::iter::*;
 use wgpu::*;
-use crate::bevy_components::egui::*;
-use crate::bevy_resources::egui::*;
-use crate::bevy_resources::wgpu::*;
-use crate::bevy_resources::winit::*;
+use crate::components::egui::*;
+use crate::resources::egui::*;
+use crate::resources::wgpu::*;
+use crate::resources::winit::*;
 
 #[expect(clippy::needless_pass_by_value, reason = "bevy_ecs requires that Res system parameters be passed by value.")]
 pub fn initialize_egui_system(

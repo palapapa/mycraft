@@ -1,11 +1,11 @@
 mod application_handler;
 mod asset;
-mod bevy_components;
-mod bevy_resources;
-mod bevy_schedules;
-mod bevy_sets;
-mod bevy_systems;
-mod bevy_world;
+mod components;
+mod resources;
+mod schedules;
+mod system_sets;
+mod systems;
+mod world;
 mod camera;
 mod egui_renderer;
 mod egui_state;

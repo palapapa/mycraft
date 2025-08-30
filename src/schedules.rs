@@ -1,6 +1,6 @@
 use bevy_ecs::schedule::*;
-use crate::bevy_sets::*;
-use crate::bevy_systems::egui::*;
+use crate::system_sets::*;
+use crate::systems::egui::*;
 
 /// The [`Schedule`] that runs every frame.
 #[derive(ScheduleLabel, Debug, Clone, PartialEq, Eq, Hash)]
