@@ -402,3 +402,6 @@ wildcard_dependencies = "warn"
 # wildcard_enum_match_arm = "warn"
 # wildcard_imports = "warn"
 zero_sized_map_values = "warn"
+
+[lints.rustdoc]
+unescaped_backticks = "warn"
