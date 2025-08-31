@@ -22,9 +22,9 @@ pub struct EguiStateResource {
 /// Based on <https://github.com/kaphula/winit-egui-wgpu-template>.
 /// 
 /// This has to be dropped before
-/// [`crate::bevy_resources::winit::WinitResource::window`] and
-/// [`crate::bevy_resources::wgpu::WgpuResource::device`] because if this is
-/// dropped after them, the app will segfault. See
+/// [`crate::resources::winit::WinitResource::window`] and
+/// [`crate::resources::wgpu::WgpuResource::device`] because if this is dropped
+/// after them, the app will segfault. See
 /// <https://github.com/emilk/egui/issues/7369>.
 #[derive(Resource)]
 pub struct EguiRendererResource {
