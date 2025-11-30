@@ -30,7 +30,7 @@ fn add_egui_entities_and_resources(world: &mut World) {
 fn add_asset_cache_resources(world: &mut World) -> Result<(), io::Error> {
     #[expect(clippy::unwrap_used, reason = "current_exe returns the absolute path to the executable file, so there must be a parent directory.")]
     let asset_path = current_exe().map_or_else(|_| PathBuf::from("assets"), |exe_path| exe_path.parent().unwrap().join("assets"));
-    info!("Using assets path: {asset_path:#?}");
+    info!("Using assets path: {}", asset_path.display());
     let asset_cache = match AssetCache::new(asset_path) {
         Ok(asset_cache) => asset_cache,
         Err(err) => {
