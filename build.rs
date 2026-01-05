@@ -18,7 +18,7 @@ fn copy_assets_directory_to_build_output() -> io::Result<()> {
         .join("target")
         .join(var("PROFILE").unwrap())
         .join("assets");
-    // Makes sure we always an empty assets directory to begin with at OUT_DIR.
+    // Makes sure we always have an empty assets directory to begin with at OUT_DIR.
     #[expect(unused_must_use, reason = "It's OK if assets_dest_path doesn't exist for it to be removed, because all we want is an empty assets directory. It's also unlikely that some files in assets_dest_path will be unremovable.")]
     remove_dir_all(&assets_dest_path);
     create_dir_all(&assets_dest_path)?;

@@ -10,9 +10,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-assets_manager = "0.13.1"
+assets_manager = { version = "0.13.1", features = ["hot-reloading"]}
 bevy_ecs = "0.16.1"
 bon = "3.7.1"
+const_format = "0.2.35"
 egui = "0.32.0"
 egui-wgpu = "0.32.0"
 egui-winit = "0.32.0"
@@ -24,7 +25,8 @@ log = "0.4.27"
 strum = { version = "0.27.2", features = ["derive"] }
 thiserror = "2.0.12"
 tokio = { version = "1.46.1", features = ["macros", "rt-multi-thread"] }
-wgpu = "25.0.2"
+wesl = "0.2.0"
+wgpu = { version = "25.0.2", features = ["wgsl"]}
 winit = "0.30.11"
 
 [build-dependencies]
@@ -108,6 +110,7 @@ enum_glob_use = "allow"
 impl_trait_in_params = "allow"
 implicit_return = "allow"
 inconsistent_struct_constructor = "allow"
+indexing_slicing = "allow"
 integer_division_remainder_used = "allow"
 iter_over_hash_type = "allow"
 min_ident_chars = "allow"

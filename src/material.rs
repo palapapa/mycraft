@@ -1,4 +1,6 @@
 use crate::mesh::*;
+use crate::shader::*;
+use assets_manager::*;
 use strum::*;
 use wgpu::*;
 
@@ -7,25 +9,18 @@ use wgpu::*;
 pub trait Material {
     /// Creates the [`BindGroup`] that will be used to render an object. The
     /// return value of [`Material::bind_group_layout`] is passed into this
-    /// function as `layout`.
+    /// function as `layout`. The returned [`BindGroup`] will be the
+    /// [`crate::constants::PER_MATERIAL_BIND_GROUP`]-th bind group in the
+    /// [`RenderPass`].
     fn bind_group(&self, device: &Device, layout: &BindGroupLayout) -> BindGroup;
 
     /// Creates the [`BindGroupLayout`] that [`Material::bind_group`] will use
     /// to create a [`BindGroup`].
     fn bind_group_layout(&self, device: &Device) -> BindGroupLayout;
 
-    /// Gets the index to use with the [`BindGroup`] returned by
-    /// [`Material::bind_group`] in [`RenderPass::set_bind_group`]. This is the
-    /// number in `@group()` to use in the shader. Defaults to 0.
-    fn bind_group_index(&self) -> u32 {
-        0
-    }
-
-    /// The return value will be passed to [`assets_manager::AssetCache::load`]
-    /// to load the vertex shader source code. It is a path relative to the
-    /// asset directory that points to the shader source file that contains the
-    /// vertex shader function to use.
-    fn vertex_shader_path(&self) -> String;
+    /// The vertex shader to use. [`WeslShader`] implements [`Asset`], so you
+    /// would typically want to load one using `asset_cache`.
+    fn vertex_shader(&self, asset_cache: &AssetCache) -> WeslShader;
 
     /// If the returned value is [`Some`], it will be the name of the vertex
     /// shader function to use in the shader specified by
@@ -35,11 +30,9 @@ pub trait Material {
         None
     }
 
-    /// The return value will be passed to [`assets_manager::AssetCache::load`]
-    /// to load the fragment shader source code. It is a path relative to the
-    /// asset directory that points to the shader source file that contains the
-    /// fragment shader function to use.
-    fn fragment_shader_path(&self) -> String;
+    /// The fragment shader to use. [`WeslShader`] implements [`Asset`], so you
+    /// would typically want to load one using `asset_cache`.
+    fn fragment_shader(&self, asset_cache: &AssetCache) -> WeslShader;
 
     /// If the returned value is [`Some`], it will be the name of the fragment
     /// shader function to use in the shader specified by
@@ -60,7 +53,7 @@ pub trait Material {
     /// 
     /// ```
     /// let mut result = [None; VertexAttributeKind::COUNT];
-    /// result[VertexAttributeKind::Vertices as usize] = Some(0);
+    /// result[VertexAttributeKind::Positions as usize] = Some(0);
     /// return result;
     /// ```
     fn attribute_to_shader_location_mapping(&self) -> [Option<u32>; VertexAttributeKind::COUNT];

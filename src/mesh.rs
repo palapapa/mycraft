@@ -143,7 +143,7 @@ pub enum MeshCreationError {
 #[derive(EnumCount)]
 #[repr(usize)]
 pub enum VertexAttributeKind {
-    Vertices,
+    Positions,
     Uv,
     Colors
 }
