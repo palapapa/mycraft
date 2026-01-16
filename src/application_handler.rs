@@ -27,6 +27,8 @@ pub struct App {
     world: World,
     startup_schedule: Schedule,
     update_schedule: Schedule,
+    post_update_schedule: Schedule,
+    render_schedule: Schedule,
     is_initialized: bool
 }
 
@@ -36,6 +38,8 @@ impl App {
             world: create_main_world()?,
             startup_schedule: StartupSchedule::create_schedule(),
             update_schedule: UpdateSchedule::create_schedule(),
+            post_update_schedule: PostUpdateSchedule::create_schedule(),
+            render_schedule: RenderSchedule::create_schedule(),
             is_initialized: false
         })
     }
@@ -221,6 +225,8 @@ impl App {
         wgpu_resource_2.command_queue.submit(once(command_encoder.finish()));
         self.world.insert_resource(WgpuFrameResource { output_surface_texture });
         self.update_schedule.run(&mut self.world);
+        self.post_update_schedule.run(&mut self.world);
+        self.render_schedule.run(&mut self.world);
         let winit_resource: &WinitResource = self.world.resource();
         winit_resource.window.pre_present_notify();
         let returned_output_surface_texture = if let Some(wgpu_frame_resource) = self.world.remove_resource::<WgpuFrameResource>() {
