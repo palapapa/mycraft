@@ -7,7 +7,6 @@ use crate::resources::egui::*;
 use crate::resources::wgpu::*;
 use crate::resources::winit::*;
 
-#[expect(clippy::needless_pass_by_value, reason = "bevy_ecs requires that Res system parameters be passed by value.")]
 pub fn initialize_egui_system(
     wgpu_resource: Res<'_, WgpuResource>,
     winit_resource: Res<'_, WinitResource>,
@@ -23,7 +22,6 @@ pub fn initialize_egui_system(
     commands.insert_resource(egui_renderer_resource);
 }
 
-#[expect(clippy::needless_pass_by_value, reason = "bevy_ecs requires that Res system parameters be passed by value.")]
 pub fn render_egui_system(
     mut egui_renderer_resource: ResMut<'_, EguiRendererResource>,
     wgpu_resource: Res<'_, WgpuResource>,

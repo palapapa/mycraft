@@ -27,12 +27,16 @@ impl Asset for WeslShader {
         // assets/shaders/ directory, absolute imports should start with
         // package::shader::...
         let Some(shader_base_path) = get_assets_base_path(cache) else {
+            error!("Error while loading shader {id}: {:#?}", WeslShaderLoadError::CannotLocateShaderBasePath);
             return Err(WeslShaderLoadError::CannotLocateShaderBasePath.into())
         };
         let compiler = Wesl::new(shader_base_path);
         let compile_result = match compiler.compile(&ModulePath::new(PathOrigin::Absolute, id.split('.').map(ToString::to_string).collect())) {
             Ok(compile_result) => compile_result,
-            Err(err) => return Err(WeslShaderLoadError::WeslCompilation(err).into())
+            Err(err) => {
+                error!("Error while loading shader {id}: {err:#?}");
+                return Err(WeslShaderLoadError::WeslCompilation(err).into());
+            }
         };
         // Although WESL doesn't need them, we still need to load the shader
         // module and its dependencies from `cache` so that assets_manager knows

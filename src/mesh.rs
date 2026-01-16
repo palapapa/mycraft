@@ -56,7 +56,7 @@ impl Mesh {
         #[builder(default)]
         colors: Vec<U8Vec4>
     ) -> Result<Self, MeshCreationError> {
-        if vertices.len() % 3 != 0 {
+        if !vertices.len().is_multiple_of(3) {
             let err = MeshCreationError::IndicesLengthNotMultipleOf3 {
                 indices_length: vertices.len()
             };

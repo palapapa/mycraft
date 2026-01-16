@@ -1,7 +1,10 @@
+use crate::asset::*;
 use crate::mesh::*;
 use crate::shader::*;
 use assets_manager::*;
+use assets_manager::Error as AssetCacheError;
 use strum::*;
+use thiserror::*;
 use wgpu::*;
 
 /// A [`Material`] determines how an object should be rendered. It contains the
@@ -20,7 +23,7 @@ pub trait Material {
 
     /// The vertex shader to use. [`WeslShader`] implements [`Asset`], so you
     /// would typically want to load one using `asset_cache`.
-    fn vertex_shader(&self, asset_cache: &AssetCache) -> WeslShader;
+    fn vertex_shader(&self, asset_cache: &AssetCache) -> Result<AssetHandle<WeslShader>, ShaderLoadingError>;
 
     /// If the returned value is [`Some`], it will be the name of the vertex
     /// shader function to use in the shader specified by
@@ -32,7 +35,7 @@ pub trait Material {
 
     /// The fragment shader to use. [`WeslShader`] implements [`Asset`], so you
     /// would typically want to load one using `asset_cache`.
-    fn fragment_shader(&self, asset_cache: &AssetCache) -> WeslShader;
+    fn fragment_shader(&self, asset_cache: &AssetCache) -> Result<AssetHandle<WeslShader>, ShaderLoadingError>;
 
     /// If the returned value is [`Some`], it will be the name of the fragment
     /// shader function to use in the shader specified by
@@ -57,4 +60,10 @@ pub trait Material {
     /// return result;
     /// ```
     fn attribute_to_shader_location_mapping(&self) -> [Option<u32>; VertexAttributeKind::COUNT];
+}
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub enum ShaderLoadingError {
+    AssetCache(#[from] AssetCacheError)
 }

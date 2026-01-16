@@ -110,6 +110,7 @@ impl App {
             Ok(adapter) => {
                 info!("The adapter has been created. {adapter:#?}");
                 info!("Adapter limits: {:#?}", adapter.limits());
+                info!("Adapter features: {:#?}", adapter.features());
                 Ok(adapter)
             }
             Err(err) => {

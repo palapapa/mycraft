@@ -63,12 +63,22 @@ impl EguiRendererResource {
         let &mut EguiRenderingDescriptor { window, device, queue, ref mut command_encoder, ref mut render_pass, screen_descriptor, ref mut egui_renderer, ref mut egui_state } = egui_rendering_descriptor;
         let mut state = self.state.lock_and_unwrap();
         state.egui_ctx().set_pixels_per_point(screen_descriptor.pixels_per_point);
+        // From egui README: An integration needs to do the following each
+        // frame:
+        //
+        // 1. Input: Gather input (mouse, touches, keyboard, screen size, etc)
+        //    and give it to eguiInput: Gather input (mouse, touches, keyboard,
+        //    screen size, etc) and give it to egui.
         let raw_input = state.take_egui_input(window);
         let rendering_closure = |context: &Context| { // The explicit parameter type is required here; otherwise it causes the "implementation is not general enough" error
             egui_renderer.render_ui(context, *egui_state);
         };
+        // 2. Call into the application GUI code.
         let full_output = state.egui_ctx().run(raw_input, rendering_closure);
+        // 3. Output: Handle egui output (cursor changes, paste, texture
+        //    allocations, ...)
         state.handle_platform_output(window, full_output.platform_output);
+        // 4. Painting: Render the triangle mesh egui produces
         let primitives = state.egui_ctx().tessellate(full_output.shapes, state.egui_ctx().pixels_per_point());
         drop(state);
         for (id, image_delta) in full_output.textures_delta.set {
