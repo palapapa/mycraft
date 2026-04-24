@@ -1,14 +1,16 @@
-use bevy_ecs::resource::*;
-use egui::*;
-use egui_wgpu::*;
-use egui_winit::*;
-use std::sync::*;
-use wgpu::*;
-use winit::event::*;
-use winit::window::{Window, Theme};
-use crate::egui_state::*;
-use crate::egui_renderer::*;
-use crate::extensions::*;
+use {
+    crate::{egui_renderer::EguiRenderer, egui_state::EguiState, extensions::MutexExtensions},
+    bevy_ecs::resource::Resource,
+    egui::{Context, ViewportId},
+    egui_wgpu::{Renderer, ScreenDescriptor},
+    egui_winit::{EventResponse, State},
+    std::sync::Mutex,
+    wgpu::{CommandEncoder, Device, Queue, RenderPass, TextureFormat},
+    winit::{
+        event::WindowEvent,
+        window::{Theme, Window}
+    }
+};
 
 #[derive(Resource)]
 pub struct EguiStateResource {
@@ -18,9 +20,9 @@ pub struct EguiStateResource {
 
 /// Handles the lower level details of rendering the UI using [`egui`]. For the
 /// actual UI renderers, see [`crate::egui_renderer`].
-/// 
+///
 /// Based on <https://github.com/kaphula/winit-egui-wgpu-template>.
-/// 
+///
 /// This has to be dropped before
 /// [`WinitResource::window`][crate::resources::winit::WinitResource::window]
 /// and [`WgpuResource::device`][crate::resources::wgpu::WgpuResource::device]
@@ -41,16 +43,35 @@ impl EguiRendererResource {
     ///   so it must match the format of the depth attachment you passed to
     ///   [`CommandEncoder::begin_render_pass`].
     pub fn new(egui_renderer_descriptor: &EguiRendererResourceDescriptor<'_>) -> Self {
-        let &EguiRendererResourceDescriptor { window, device, output_color_format, output_depth_format, msaa_samples } = egui_renderer_descriptor;
+        let &EguiRendererResourceDescriptor {
+            window,
+            device,
+            output_color_format,
+            output_depth_format,
+            msaa_samples
+        } = egui_renderer_descriptor;
         let context = Context::default();
         // The meaning of the argument max_texture_side is documented at
         // egui::data::input::RawInput::max_texture_side.
         #[expect(clippy::cast_possible_truncation, reason = "State::new wants a f32.")]
-        let state = State::new(context, ViewportId::ROOT, window, Some(window.scale_factor() as f32), Some(Theme::Dark), Some(device.limits().max_texture_dimension_2d as usize));
-        let renderer = Renderer::new(device, output_color_format, output_depth_format, msaa_samples, true);
+        let state = State::new(
+            context,
+            ViewportId::ROOT,
+            window,
+            Some(window.scale_factor() as f32),
+            Some(Theme::Dark),
+            Some(device.limits().max_texture_dimension_2d as usize)
+        );
+        let renderer = Renderer::new(
+            device,
+            output_color_format,
+            output_depth_format,
+            msaa_samples,
+            true
+        );
         Self {
             state: Mutex::new(state),
-            renderer,
+            renderer
         }
     }
 
@@ -59,33 +80,57 @@ impl EguiRendererResource {
     ///   [`RenderPass::forget_lifetime`] on
     ///   [`EguiRenderingDescriptor::render_pass`] before passing.
     pub fn render_ui(&mut self, egui_rendering_descriptor: &mut EguiRenderingDescriptor<'_>) {
-        // The immutable references don't need `ref mut` because immutable references are Copy.
-        let &mut EguiRenderingDescriptor { window, device, queue, ref mut command_encoder, ref mut render_pass, screen_descriptor, ref mut egui_renderer, ref mut egui_state } = egui_rendering_descriptor;
+        // The immutable references don't need `ref mut` because immutable references
+        // are Copy.
+        let &mut EguiRenderingDescriptor {
+            window,
+            device,
+            queue,
+            ref mut command_encoder,
+            ref mut render_pass,
+            screen_descriptor,
+            ref mut egui_renderer,
+            ref mut egui_state
+        } = egui_rendering_descriptor;
         let mut state = self.state.lock_and_unwrap();
-        state.egui_ctx().set_pixels_per_point(screen_descriptor.pixels_per_point);
+        state
+            .egui_ctx()
+            .set_pixels_per_point(screen_descriptor.pixels_per_point);
         // From egui README: An integration needs to do the following each
         // frame:
         //
-        // 1. Input: Gather input (mouse, touches, keyboard, screen size, etc)
-        //    and give it to eguiInput: Gather input (mouse, touches, keyboard,
-        //    screen size, etc) and give it to egui.
+        // 1. Input: Gather input (mouse, touches, keyboard, screen size, etc) and give
+        //    it to eguiInput: Gather input (mouse, touches, keyboard, screen size, etc)
+        //    and give it to egui.
         let raw_input = state.take_egui_input(window);
-        let rendering_closure = |context: &Context| { // The explicit parameter type is required here; otherwise it causes the "implementation is not general enough" error
+        let rendering_closure = |context: &Context| {
+            // The explicit parameter type is required here; otherwise it causes the
+            // "implementation is not general enough" error
             egui_renderer.render_ui(context, *egui_state);
         };
         // 2. Call into the application GUI code.
         let full_output = state.egui_ctx().run(raw_input, rendering_closure);
-        // 3. Output: Handle egui output (cursor changes, paste, texture
-        //    allocations, ...)
+        // 3. Output: Handle egui output (cursor changes, paste, texture allocations,
+        //    ...)
         state.handle_platform_output(window, full_output.platform_output);
         // 4. Painting: Render the triangle mesh egui produces
-        let primitives = state.egui_ctx().tessellate(full_output.shapes, state.egui_ctx().pixels_per_point());
+        let primitives = state
+            .egui_ctx()
+            .tessellate(full_output.shapes, state.egui_ctx().pixels_per_point());
         drop(state);
         for (id, image_delta) in full_output.textures_delta.set {
-            self.renderer.update_texture(device, queue, id, &image_delta);
+            self.renderer
+                .update_texture(device, queue, id, &image_delta);
         }
-        self.renderer.update_buffers(device, queue, command_encoder, &primitives, screen_descriptor);
-        self.renderer.render(render_pass, &primitives, screen_descriptor);
+        self.renderer.update_buffers(
+            device,
+            queue,
+            command_encoder,
+            &primitives,
+            screen_descriptor
+        );
+        self.renderer
+            .render(render_pass, &primitives, screen_descriptor);
         // Free textures marked for destruction **after** queue submit since
         // they might still be used in the current frame. Calling
         // `wgpu::Texture::destroy` on a texture that is still in use would

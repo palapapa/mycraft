@@ -1,9 +1,12 @@
-use crate::material::*;
-use bevy_ecs::resource::*;
-use wgpu::*;
-use std::collections::*;
-use std::sync::*;
-use winit::window::*;
+use {
+    crate::material::{Material, MaterialPipelineKey},
+    bevy_ecs::resource::Resource,
+    std::{collections::HashMap, sync::Arc},
+    wgpu::{
+        BindGroup, Device, Queue, RenderPipeline, Surface, SurfaceConfiguration, SurfaceTexture
+    },
+    winit::window::Window
+};
 
 #[derive(Resource)]
 pub struct WgpuResource {
@@ -11,7 +14,7 @@ pub struct WgpuResource {
     /// [`WinitResource::window`][crate::resources::winit::WinitResource::window]
     /// so that it is dropped before it in order to not cause a segfault. See
     /// <https://github.com/gfx-rs/wgpu/pull/1792>.
-    /// 
+    ///
     /// The lifetime parameter of [`Surface`] is the lifetime of the
     /// [`Window`][winit::window::Window] used to create it, and since we
     /// wrapped the

@@ -1,27 +1,41 @@
-use bevy_ecs::schedule::*;
-use bevy_ecs::system::*;
-use bevy_ecs::world::*;
-use egui_wgpu::*;
-use std::fmt::Debug;
-use std::iter::*;
-use std::sync::*;
-use thiserror::*;
-use futures::executor::*;
-use log::*;
-use tokio::task::block_in_place;
-use winit::application::*;
-use winit::dpi::*;
-use winit::error::*;
-use winit::event_loop::*;
-use winit::window::*;
-use winit::event::WindowEvent::{self, *};
-use wgpu::*;
-use crate::resources::egui::*;
-use crate::resources::renderer::*;
-use crate::schedules::*;
-use crate::world::*;
+use {
+    crate::{
+        resources::{
+            egui::EguiRendererResource,
+            renderer::{WgpuFrameResource, WgpuResource, WinitResource}
+        },
+        schedules::{PostUpdateSchedule, RenderSchedule, StartupSchedule, UpdateSchedule},
+        world::{WorldInitializationError, create_main_world}
+    },
+    bevy_ecs::{
+        schedule::Schedule,
+        system::{Res, SystemState},
+        world::World
+    },
+    futures::executor::block_on,
+    log::{error, info},
+    std::{fmt::Debug, iter::once, sync::Arc},
+    thiserror::Error,
+    tokio::task::block_in_place,
+    wgpu::{
+        Adapter, Backends, Color, CommandEncoderDescriptor, CompositeAlphaMode, CreateSurfaceError,
+        Device, DeviceDescriptor, Instance, InstanceDescriptor, InstanceFlags, LoadOp, Operations,
+        PowerPreference, PresentMode, Queue, RenderPassColorAttachment, RenderPassDescriptor,
+        RequestAdapterError, RequestAdapterOptions, RequestDeviceError, StoreOp, Surface,
+        SurfaceConfiguration, SurfaceError, SurfaceTarget, TextureUsages, TextureViewDescriptor
+    },
+    winit::{
+        application::ApplicationHandler,
+        dpi::PhysicalSize,
+        error::OsError,
+        event::WindowEvent::{self, CloseRequested, RedrawRequested, Resized},
+        event_loop::ActiveEventLoop,
+        window::{Window, WindowId}
+    }
+};
 
-/// An implementation of [`ApplicationHandler`] that manages the states of the app and the GPU.
+/// An implementation of [`ApplicationHandler`] that manages the states of the
+/// app and the GPU.
 pub struct App {
     world: World,
     startup_schedule: Schedule,
@@ -42,15 +56,21 @@ impl App {
             is_initialized: false
         })
     }
-    
+
     /// Initializes the fields inside this `struct` and the ECS. Does nothing if
     /// called multiple times after succeeding. This should be called in
     /// [`ApplicationHandler::resumed`].
-    /// 
+    ///
     /// * `event_loop`: The [`ActiveEventLoop`] provided by
     ///   [`ApplicationHandler::resumed`] used to create a [`Window`].
-    #[expect(clippy::future_not_send, reason = "This function is currently only called using block_on.")]
-    async fn initialize(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppInitializationError> {
+    #[expect(
+        clippy::future_not_send,
+        reason = "This function is currently only called using block_on."
+    )]
+    async fn initialize(
+        &mut self,
+        event_loop: &ActiveEventLoop
+    ) -> Result<(), AppInitializationError> {
         if self.is_initialized {
             return Ok(());
         }
@@ -62,7 +82,12 @@ impl App {
         let surface_config = Self::create_surface_config(&surface, &adapter, &window)?;
         surface.configure(&device, &surface_config);
         info!("Surface configured.");
-        self.world.insert_resource(WgpuResource { command_queue, surface, surface_config, device });
+        self.world.insert_resource(WgpuResource {
+            command_queue,
+            surface,
+            surface_config,
+            device
+        });
         self.world.insert_resource(WinitResource { window });
         self.startup_schedule.run(&mut self.world);
         self.is_initialized = true;
@@ -73,7 +98,10 @@ impl App {
         let window_attributes = Window::default_attributes().with_title("Mycraft");
         match event_loop.create_window(window_attributes) {
             Ok(window) => {
-                info!("The window with ID {} has been created.", u64::from(window.id()));
+                info!(
+                    "The window with ID {} has been created.",
+                    u64::from(window.id())
+                );
                 Ok(Arc::new(window))
             },
             Err(err) => {
@@ -91,7 +119,10 @@ impl App {
         })
     }
 
-    fn create_surface<'window>(instance: &Instance, window: impl Into<SurfaceTarget<'window>>) -> Result<Surface<'window>, AppInitializationError> {
+    fn create_surface<'window>(
+        instance: &Instance,
+        window: impl Into<SurfaceTarget<'window>>
+    ) -> Result<Surface<'window>, AppInitializationError> {
         match instance.create_surface(window) {
             Ok(surface) => {
                 info!("The surface has been created. {surface:#?}");
@@ -104,18 +135,24 @@ impl App {
         }
     }
 
-    async fn create_adapter(instance: &Instance, surface: &Surface<'_>) -> Result<Adapter, AppInitializationError> {
-        match instance.request_adapter(&RequestAdapterOptions {
-            power_preference: PowerPreference::HighPerformance,
-            compatible_surface: Some(surface),
-            force_fallback_adapter: false
-        }).await {
+    async fn create_adapter(
+        instance: &Instance,
+        surface: &Surface<'_>
+    ) -> Result<Adapter, AppInitializationError> {
+        match instance
+            .request_adapter(&RequestAdapterOptions {
+                power_preference: PowerPreference::HighPerformance,
+                compatible_surface: Some(surface),
+                force_fallback_adapter: false
+            })
+            .await
+        {
             Ok(adapter) => {
                 info!("The adapter has been created. {adapter:#?}");
                 info!("Adapter limits: {:#?}", adapter.limits());
                 info!("Adapter features: {:#?}", adapter.features());
                 Ok(adapter)
-            }
+            },
             Err(err) => {
                 error!("The adapter could not be created. {err:#?}");
                 Err(AppInitializationError::RequestAdapter(err))
@@ -123,14 +160,22 @@ impl App {
         }
     }
 
-    async fn create_device_and_queue(adapter: &Adapter) -> Result<(Device, Queue), AppInitializationError> {
-        match adapter.request_device(&DeviceDescriptor {
-            label: Some("default-device"),
-            required_limits: adapter.limits(),
-            ..Default::default()
-        }).await {
+    async fn create_device_and_queue(
+        adapter: &Adapter
+    ) -> Result<(Device, Queue), AppInitializationError> {
+        match adapter
+            .request_device(&DeviceDescriptor {
+                label: Some("default-device"),
+                required_limits: adapter.limits(),
+                ..Default::default()
+            })
+            .await
+        {
             Ok(val) => {
-                info!("The device and command queue has been created. {:#?}, {:#?}", val.0, val.1);
+                info!(
+                    "The device and command queue has been created. {:#?}, {:#?}",
+                    val.0, val.1
+                );
                 Ok(val)
             },
             Err(err) => {
@@ -140,28 +185,51 @@ impl App {
         }
     }
 
-    fn create_surface_config(surface: &Surface<'_>, adapter: &Adapter, window: &Window) -> Result<SurfaceConfiguration, AppInitializationError> {
+    fn create_surface_config(
+        surface: &Surface<'_>,
+        adapter: &Adapter,
+        window: &Window
+    ) -> Result<SurfaceConfiguration, AppInitializationError> {
         let surface_capabilities = surface.get_capabilities(adapter);
         if surface_capabilities.formats.is_empty() {
-            error!("The surface format could not be determined because the surface is incompatible with the adapter.");
+            error!(
+                "The surface format could not be determined because the surface is incompatible \
+                 with the adapter."
+            );
             return Err(AppInitializationError::CreateSurfaceTextureFormat);
         }
-        #[expect(clippy::indexing_slicing, reason = "The Vec has already been checked to not be empty.")]
-        let surface_format = surface_capabilities.formats
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "The Vec has already been checked to not be empty."
+        )]
+        let surface_format = surface_capabilities
+            .formats
             .iter()
             .find(|format| format.is_srgb())
             .copied()
             .unwrap_or(surface_capabilities.formats[0]);
-        info!("Supported surface formats: {:#?}", surface_capabilities.formats);
+        info!(
+            "Supported surface formats: {:#?}",
+            surface_capabilities.formats
+        );
         info!("The surface format {surface_format:#?} has been chosen.");
         let present_mode = PresentMode::Fifo;
-        info!("Supported present modes: {:#?}", surface_capabilities.present_modes);
+        info!(
+            "Supported present modes: {:#?}",
+            surface_capabilities.present_modes
+        );
         info!("The present mode {present_mode:#?} has been chosen.");
         let alpha_mode = CompositeAlphaMode::Auto;
-        info!("Supported alpha modes: {:#?}", surface_capabilities.alpha_modes);
+        info!(
+            "Supported alpha modes: {:#?}",
+            surface_capabilities.alpha_modes
+        );
         info!("The alpha mode {alpha_mode:#?} has been chosen.");
         let surface_usages = TextureUsages::RENDER_ATTACHMENT;
-        info!("Supported surface usages: {:#?}", surface_capabilities.usages);
+        info!(
+            "Supported surface usages: {:#?}",
+            surface_capabilities.usages
+        );
         info!("The surface usages {surface_usages:#?} have been chosen.");
         Ok(SurfaceConfiguration {
             alpha_mode,
@@ -182,7 +250,9 @@ impl App {
         let wgpu_resource: &mut WgpuResource = &mut self.world.resource_mut();
         wgpu_resource.surface_config.width = new_size.width;
         wgpu_resource.surface_config.height = new_size.height;
-        wgpu_resource.surface.configure(&wgpu_resource.device, &wgpu_resource.surface_config);
+        wgpu_resource
+            .surface
+            .configure(&wgpu_resource.device, &wgpu_resource.surface_config);
         info!("Resized the window to {new_size:#?}");
     }
 
@@ -195,16 +265,22 @@ impl App {
             Ok(output_surface_texture) => output_surface_texture,
             Err(err) => {
                 error!("`get_current_texture` failed when rendering. {err:#?}");
-                return Err(RenderError::Surface(err))
+                return Err(RenderError::Surface(err));
             }
         };
-        let output_surface_texture_view = output_surface_texture.texture.create_view(&TextureViewDescriptor {
-            label: Some("main-surface-texture-view"),
-            ..Default::default()
-        });
-        let mut command_encoder = wgpu_resource.device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some("main-command-encoder")
-        });
+        let output_surface_texture_view =
+            output_surface_texture
+                .texture
+                .create_view(&TextureViewDescriptor {
+                    label: Some("main-surface-texture-view"),
+                    ..Default::default()
+                });
+        let mut command_encoder =
+            wgpu_resource
+                .device
+                .create_command_encoder(&CommandEncoderDescriptor {
+                    label: Some("main-command-encoder")
+                });
         let render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("main-render-pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
@@ -221,20 +297,26 @@ impl App {
         // Acquires WgpuResource again. This somehow solves a double mutable
         // reference error.
         let wgpu_resource_2: &WgpuResource = self.world.resource();
-        wgpu_resource_2.command_queue.submit(once(command_encoder.finish()));
-        self.world.insert_resource(WgpuFrameResource { output_surface_texture });
+        wgpu_resource_2
+            .command_queue
+            .submit(once(command_encoder.finish()));
+        self.world.insert_resource(WgpuFrameResource {
+            output_surface_texture
+        });
         self.update_schedule.run(&mut self.world);
         self.post_update_schedule.run(&mut self.world);
         self.render_schedule.run(&mut self.world);
         let winit_resource: &WinitResource = self.world.resource();
         winit_resource.window.pre_present_notify();
-        let returned_output_surface_texture = if let Some(wgpu_frame_resource) = self.world.remove_resource::<WgpuFrameResource>() {
-                wgpu_frame_resource.output_surface_texture
-            }
-            else {
-                error!("Could not retrieve the SurfaceTexture to present after MainSchedule finished.");
-                return Err(RenderError::CouldNotPresent)
-            };
+        let returned_output_surface_texture = if let Some(wgpu_frame_resource) =
+            self.world.remove_resource::<WgpuFrameResource>()
+        {
+            wgpu_frame_resource.output_surface_texture
+        }
+        else {
+            error!("Could not retrieve the SurfaceTexture to present after MainSchedule finished.");
+            return Err(RenderError::CouldNotPresent);
+        };
         returned_output_surface_texture.present();
         Ok(())
     }
@@ -244,7 +326,10 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.is_initialized {
             let winit_resource: &WinitResource = self.world.resource();
-            info!("The window with ID {} is resuming.", u64::from(winit_resource.window.id()));
+            info!(
+                "The window with ID {} is resuming.",
+                u64::from(winit_resource.window.id())
+            );
             return;
         }
         // If `resumed` is called for the first time.
@@ -259,15 +344,19 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent
+    ) {
         if !self.is_initialized {
             return;
         }
         // We need to use a SystemSet here to avoid having a mutable and
         // immutable borrow of self.world at the same time.
-        let mut system_state: SystemState<
-            (Res<'_, EguiRendererResource>,
-            Res<'_, WinitResource>)> = SystemState::new(&mut self.world);
+        let mut system_state: SystemState<(Res<'_, EguiRendererResource>, Res<'_, WinitResource>)> =
+            SystemState::new(&mut self.world);
         let (egui_renderer_resource, winit_resource) = system_state.get(&self.world);
         let event_response = egui_renderer_resource.handle_event(&winit_resource.window, &event);
         if event_response.consumed {
@@ -276,7 +365,7 @@ impl ApplicationHandler for App {
         match event {
             Resized(new_size) => {
                 self.resize(new_size);
-            }
+            },
             RedrawRequested => {
                 winit_resource.window.request_redraw(); // Can't be below self.render because that would create two mutable references.
                 match self.render() {
@@ -285,11 +374,11 @@ impl ApplicationHandler for App {
                         error!("Error encountered while rendering. {err:#?}");
                     }
                 }
-            }
+            },
             CloseRequested => {
                 info!("The window with ID {} is exiting.", u64::from(window_id));
                 event_loop.exit();
-            }
+            },
             _ => {}
         }
     }
@@ -320,7 +409,10 @@ enum AppInitializationError {
     #[error(transparent)]
     RequestDevice(#[from] RequestDeviceError),
 
-    #[error("The surface format could not be determined because the surface is incompatible with the adapter.")]
+    #[error(
+        "The surface format could not be determined because the surface is incompatible with the \
+         adapter."
+    )]
     CreateSurfaceTextureFormat,
 
     #[error(transparent)]

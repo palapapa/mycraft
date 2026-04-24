@@ -1,10 +1,12 @@
-use bitflags::*;
-use bon::bon;
-use getset::*;
-use glam::*;
-use log::*;
-use mesh_builder::*;
-use thiserror::*;
+use {
+    bitflags::bitflags,
+    bon::bon,
+    getset::Getters,
+    glam::{U8Vec4, Vec2, Vec3},
+    log::error,
+    mesh_builder::State,
+    thiserror::Error
+};
 
 /// # Invariants
 /// - The length of [`Self::indices`] must be a multiple of 3, including 0.
@@ -16,17 +18,17 @@ use thiserror::*;
 ///   have the same length.
 /// - If all vertex attributes are empty, then [`Self::indices`] must also be
 ///   empty. This is a special state where this [`Mesh`] is considered "empty".
-/// 
+///
 /// These invariants are checked when the [`Mesh`] is built.
 ///
 /// This `struct` is immutable in order to not allow the user to violate these
 /// invariants.
-/// 
+///
 /// To create a [`Mesh`], use [`Self::builder`], or convert a `struct` that
 /// implements [`AsMeshBuilder`] into one, such as those defined in
 /// [`crate::shapes`]. Any vertex attribute that is not set in the builder will
 /// default to being empty.
-/// 
+///
 /// It is possible to build a nonsensical [`Mesh`], like one whose only
 /// non-empty vertex attribute is [`Self::colors`]. However, such [`Mesh`] will
 /// fail to be rendered by any normal shader anyway, so such situation is not
@@ -44,14 +46,10 @@ pub struct Mesh {
 impl Mesh {
     #[builder(state_mod(vis = "pub"))]
     pub fn new(
-        #[builder(default)]
-        vertices: Vec<Vec3>,
-        #[builder(default)]
-        indices: Vec<usize>,
-        #[builder(default)]
-        uv: Vec<Vec2>,
-        #[builder(default)]
-        colors: Vec<U8Vec4>
+        #[builder(default)] vertices: Vec<Vec3>,
+        #[builder(default)] indices: Vec<usize>,
+        #[builder(default)] uv: Vec<Vec2>,
+        #[builder(default)] colors: Vec<U8Vec4>
     ) -> Result<Self, MeshCreationError> {
         if !vertices.len().is_multiple_of(3) {
             let err = MeshCreationError::IndicesLengthNotMultipleOf3 {
@@ -64,10 +62,11 @@ impl Mesh {
         let shortest_attribute_length_and_name = vec![
             (vertices.len(), "vertices"),
             (uv.len(), "uv"),
-            (colors.len(), "colors")]
-            .into_iter()
-            .filter(|pair| pair.0 != 0)
-            .min_by_key(|pair| pair.0);
+            (colors.len(), "colors"),
+        ]
+        .into_iter()
+        .filter(|pair| pair.0 != 0)
+        .min_by_key(|pair| pair.0);
         match shortest_attribute_length_and_name {
             None => {
                 if let indices_length @ 1.. = indices.len() {
@@ -76,14 +75,27 @@ impl Mesh {
                     return Err(err);
                 }
                 // Empty Mesh.
-                Ok(Self { vertices, indices, uv, colors })
-            }
+                Ok(Self {
+                    vertices,
+                    indices,
+                    uv,
+                    colors
+                })
+            },
             Some((shortest_attribute_length, shortest_attribute_name)) => {
                 if indices.is_empty() {
                     // Using the implied [0, 1, ..., L - 1] indices.
-                    return Ok(Self { vertices, indices, uv, colors });
+                    return Ok(Self {
+                        vertices,
+                        indices,
+                        uv,
+                        colors
+                    });
                 }
-                #[expect(clippy::unwrap_used, reason = "We have already checked that indices.len() is not 0.")]
+                #[expect(
+                    clippy::unwrap_used,
+                    reason = "We have already checked that indices.len() is not 0."
+                )]
                 let max_index = indices.iter().copied().max().unwrap();
                 if max_index > shortest_attribute_length - 1 {
                     let err = MeshCreationError::IndicesOutOfBounds {
@@ -92,11 +104,16 @@ impl Mesh {
                         max_index
                     };
                     error!("Mesh creation failed: {err}");
-                    return Err(err)
+                    return Err(err);
                 }
                 // This is the typical situation where you have some vertex
                 // attributes and vertices is not empty.
-                Ok(Self { vertices, indices, uv, colors })
+                Ok(Self {
+                    vertices,
+                    indices,
+                    uv,
+                    colors
+                })
             }
         }
     }
@@ -125,9 +142,7 @@ pub trait AsMeshBuilder<BuilderState: State> {
 #[derive(Debug, Error)]
 pub enum MeshCreationError {
     #[error("The length of `indices` must be a multiple of 3, but it is {}.", .indices_length)]
-    IndicesLengthNotMultipleOf3 {
-        indices_length: usize
-    },
+    IndicesLengthNotMultipleOf3 { indices_length: usize },
     #[error("`indices` contains {}, which indexes the vertex attribute {} out of bounds, whose length is only {}.",
         .max_index,
         .out_of_bounds_vertex_attribute_name,
@@ -138,12 +153,10 @@ pub enum MeshCreationError {
         /// `'static`.
         out_of_bounds_vertex_attribute_name: &'static str,
         out_of_bounds_vertex_attribute_length: usize,
-        max_index: usize,
+        max_index: usize
     },
     #[error("All vertex attributes are empty, but `indices` is not empty. It's length is {}", .indices_length)]
-    EmptyMeshWithNonemptyIndices {
-        indices_length: usize
-    }
+    EmptyMeshWithNonemptyIndices { indices_length: usize }
 }
 
 bitflags! {

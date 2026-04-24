@@ -1,12 +1,9 @@
-use bevy_ecs::component::*;
-use bevy_ecs::hierarchy::*;
-use glam::*;
-use std::borrow::*;
-use std::ops::*;
-use crate::asset::*;
-use crate::camera::*;
-use crate::material::*;
-use crate::mesh::*;
+use {
+    crate::{asset::AssetHandle, camera::ProjectionMode, material::Material, mesh::Mesh},
+    bevy_ecs::{component::Component, hierarchy::validate_parent_has_component},
+    glam::{Affine3A, Quat, Vec3},
+    std::{borrow::Borrow, ops::Mul}
+};
 
 /// Represents an [`Entity`][bevy_ecs::entity::Entity]'s transformation in its
 /// local space. This [`Component`] must be accompanied by
@@ -77,13 +74,17 @@ impl<T: Borrow<GlobalTransformComponent>> Mul<T> for &GlobalTransformComponent {
     type Output = GlobalTransformComponent;
 
     fn mul(self, rhs: T) -> Self::Output {
-        GlobalTransformComponent { global_transform: self.global_transform * rhs.borrow().global_transform }
+        GlobalTransformComponent {
+            global_transform: self.global_transform * rhs.borrow().global_transform
+        }
     }
 }
 
 impl<T: Borrow<TransformComponent>> From<T> for GlobalTransformComponent {
     fn from(value: T) -> Self {
-        Self { global_transform: value.borrow().into() }
+        Self {
+            global_transform: value.borrow().into()
+        }
     }
 }
 

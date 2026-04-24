@@ -1,10 +1,22 @@
-use bevy_ecs::system::*;
-use egui_wgpu::*;
-use std::iter::*;
-use wgpu::*;
-use crate::components::egui::*;
-use crate::resources::egui::*;
-use crate::resources::renderer::*;
+use {
+    crate::{
+        components::egui::EguiRendererComponent,
+        resources::{
+            egui::{
+                EguiRendererResource, EguiRendererResourceDescriptor, EguiRenderingDescriptor,
+                EguiStateResource
+            },
+            renderer::{WgpuFrameResource, WgpuResource, WinitResource}
+        }
+    },
+    bevy_ecs::system::{Commands, Query, Res, ResMut},
+    egui_wgpu::ScreenDescriptor,
+    std::iter::once,
+    wgpu::{
+        CommandEncoderDescriptor, LoadOp, Operations, RenderPassColorAttachment,
+        RenderPassDescriptor, StoreOp, TextureViewDescriptor
+    }
+};
 
 pub fn initialize_egui_system(
     wgpu_resource: Res<'_, WgpuResource>,
@@ -29,25 +41,33 @@ pub fn render_egui_system(
     mut egui_state_resource: ResMut<'_, EguiStateResource>,
     egui_renderers: Query<'_, '_, &mut EguiRendererComponent>
 ) {
-    let output_surface_texture_view = wgpu_frame_resource.output_surface_texture.texture.create_view(&TextureViewDescriptor {
-        label: Some("egui-surface-texture-view"),
-        ..Default::default()
-    });
-    let mut command_encoder = wgpu_resource.device.create_command_encoder(&CommandEncoderDescriptor {
-        label: Some("egui-command-encoder")
-    });
-    let mut render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor {
-        label: Some("egui-render-pass"),
-        color_attachments: &[Some(RenderPassColorAttachment {
-            view: &output_surface_texture_view,
-            resolve_target: None,
-            ops: Operations {
-                load: LoadOp::Load,
-                store: StoreOp::Store
-            }
-        })],
-        ..Default::default()
-    }).forget_lifetime();
+    let output_surface_texture_view = wgpu_frame_resource
+        .output_surface_texture
+        .texture
+        .create_view(&TextureViewDescriptor {
+            label: Some("egui-surface-texture-view"),
+            ..Default::default()
+        });
+    let mut command_encoder =
+        wgpu_resource
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("egui-command-encoder")
+            });
+    let mut render_pass = command_encoder
+        .begin_render_pass(&RenderPassDescriptor {
+            label: Some("egui-render-pass"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: &output_surface_texture_view,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Load,
+                    store: StoreOp::Store
+                }
+            })],
+            ..Default::default()
+        })
+        .forget_lifetime();
     for mut egui_renderer in egui_renderers {
         egui_renderer_resource.render_ui(&mut EguiRenderingDescriptor {
             window: &winit_resource.window,
@@ -56,8 +76,14 @@ pub fn render_egui_system(
             command_encoder: &mut command_encoder,
             render_pass: &mut render_pass,
             screen_descriptor: &ScreenDescriptor {
-                size_in_pixels: [winit_resource.window.inner_size().width, winit_resource.window.inner_size().height],
-                #[expect(clippy::cast_possible_truncation, reason = "pixels_per_point wants a f32.")]
+                size_in_pixels: [
+                    winit_resource.window.inner_size().width,
+                    winit_resource.window.inner_size().height
+                ],
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "pixels_per_point wants a f32."
+                )]
                 pixels_per_point: winit_resource.window.scale_factor() as f32
             },
             egui_renderer: &mut *egui_renderer.renderer,
@@ -65,5 +91,7 @@ pub fn render_egui_system(
         });
     }
     drop(render_pass); // Remember to drop because of the forget_lifetime above; otherwise wgpu will panic.
-    wgpu_resource.command_queue.submit(once(command_encoder.finish()));
+    wgpu_resource
+        .command_queue
+        .submit(once(command_encoder.finish()));
 }

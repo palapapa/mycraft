@@ -1,6 +1,11 @@
-use crate::mesh::{*, mesh_builder::*};
-use glam::*;
-use std::borrow::*;
+use {
+    crate::mesh::{
+        AsMeshBuilder, Mesh, MeshBuilder,
+        mesh_builder::{SetIndices, SetUv, SetVertices}
+    },
+    glam::{Vec2, Vec3},
+    std::borrow::Borrow
+};
 
 pub struct Cuboid {
     /// The size of the cuboid in the order of X, Y, and Z. When any of them is
@@ -16,7 +21,7 @@ impl<T: Borrow<Cuboid>> AsMeshBuilder<SetUv<SetIndices<SetVertices>>> for T {
     /// 0) as the UV in the bottom left corner, and (1, 1) in the upper right
     /// corner when the cuboid is viewed from the side. The faces are in the
     /// order of +X, -X, +Y, -Y, +Z, -Z.
-    /// 
+    ///
     /// Refer to `diagrams/cuboid.png` for a diagram of the mesh being built.
     fn as_mesh_builder(&self) -> MeshBuilder<SetUv<SetIndices<SetVertices>>> {
         let max = self.borrow().dimensions * 0.5;
@@ -54,19 +59,19 @@ impl<T: Borrow<Cuboid>> AsMeshBuilder<SetUv<SetIndices<SetVertices>>> for T {
             Vec3::from_array([min.x, max.y, min.z]), // 23
         ];
         let indices = vec![
-            0, 1, 2, 2, 3, 0,
-            4, 5, 6, 6, 7, 4,
-            8, 9, 10, 10, 11, 8,
-            12, 13, 14, 14, 15, 12,
-            16, 17, 18, 18, 19, 16,
-            20, 21, 22, 22, 23, 20
+            0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4, 8, 9, 10, 10, 11, 8, 12, 13, 14, 14, 15, 12, 16,
+            17, 18, 18, 19, 16, 20, 21, 22, 22, 23, 20,
         ];
         let uv: Vec<Vec2> = vec![
             Vec2::from_array([0.0, 0.0]),
             Vec2::from_array([1.0, 0.0]),
             Vec2::from_array([1.0, 1.0]),
-            Vec2::from_array([0.0, 1.0])
-        ].into_iter().cycle().take(24).collect();
+            Vec2::from_array([0.0, 1.0]),
+        ]
+        .into_iter()
+        .cycle()
+        .take(24)
+        .collect();
         Mesh::builder().vertices(vertices).indices(indices).uv(uv)
     }
 }

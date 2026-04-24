@@ -1,5 +1,4 @@
-use bevy_ecs::component::*;
-use crate::egui_renderer::*;
+use {crate::egui_renderer::EguiRenderer, bevy_ecs::component::Component};
 
 #[derive(Component)]
 pub struct EguiRendererComponent {

@@ -1,5 +1,7 @@
-use egui::*;
-use crate::egui_state::*;
+use {
+    crate::egui_state::EguiState,
+    egui::{Context, Key, Window}
+};
 
 pub trait EguiRenderer {
     fn render_ui(&mut self, egui_context: &Context, ui_state: &mut dyn EguiState);
@@ -19,11 +21,8 @@ impl EguiRenderer for DefaultEguiRenderer {
         }
         Window::new("Hello, World!")
             .vscroll(true)
-            .show(
-                egui_context,
-                |ui| {
-                    ui.label("Hello, Label!");
-                }
-            );
+            .show(egui_context, |ui| {
+                ui.label("Hello, Label!");
+            });
     }
 }
