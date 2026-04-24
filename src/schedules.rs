@@ -1,6 +1,7 @@
 use bevy_ecs::schedule::*;
 use crate::systems::egui::*;
 use crate::systems::transform::*;
+use crate::system_sets::*;
 
 const COMMON_SCHEDULE_BUILD_SETTINGS: ScheduleBuildSettings = ScheduleBuildSettings {
     ambiguity_detection: LogLevel::Warn,
@@ -60,7 +61,7 @@ impl RenderSchedule {
     pub fn create_schedule() -> Schedule {
         let mut schedule = Schedule::new(Self);
         schedule.set_build_settings(COMMON_SCHEDULE_BUILD_SETTINGS)
-            .add_systems(render_egui_system);
+            .add_systems(render_egui_system.in_set(RenderingSystemSets::Egui));
         schedule
     }
 }

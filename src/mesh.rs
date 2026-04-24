@@ -1,9 +1,9 @@
+use bitflags::*;
 use bon::bon;
 use getset::*;
 use glam::*;
 use log::*;
 use mesh_builder::*;
-use strum::*;
 use thiserror::*;
 
 /// # Invariants
@@ -20,10 +20,7 @@ use thiserror::*;
 /// These invariants are checked when the [`Mesh`] is built.
 ///
 /// This `struct` is immutable in order to not allow the user to violate these
-/// invariants. It wouldn't be very useful even if it were mutable, because
-/// [`Mesh`]es are used by [`bevy_ecs::component::Component`]s in the form of
-/// [`crate::asset::AssetHandle`]s, which do not provide a way to mutate the
-/// assets they point to.
+/// invariants.
 /// 
 /// To create a [`Mesh`], use [`Self::builder`], or convert a `struct` that
 /// implements [`AsMeshBuilder`] into one, such as those defined in
@@ -103,6 +100,22 @@ impl Mesh {
             }
         }
     }
+
+    /// Gets a [`VertexAttributes`] based on what vertex attributes this
+    /// [`Mesh`] has.
+    pub fn vertex_attributes(&self) -> VertexAttributes {
+        let mut result = VertexAttributes::empty();
+        if !self.vertices.is_empty() {
+            result.insert(VertexAttributes::POSITIONS);
+        }
+        if !self.uv.is_empty() {
+            result.insert(VertexAttributes::UVS);
+        }
+        if !self.colors.is_empty() {
+            result.insert(VertexAttributes::COLORS);
+        }
+        result
+    }
 }
 
 pub trait AsMeshBuilder<BuilderState: State> {
@@ -133,17 +146,12 @@ pub enum MeshCreationError {
     }
 }
 
-/// Used in a [`crate::material::Material`] to specify which vertex attributes
-/// it needs and which `@location()` to assign to each of them in the shader.
-/// 
-/// This `enum` must have the default 0-based discriminants; otherwise, the
-/// return value of
-/// [`crate::material::Material::attribute_to_shader_location_mapping`] will be
-/// indexed out of bounds.
-#[derive(EnumCount)]
-#[repr(usize)]
-pub enum VertexAttributeKind {
-    Positions,
-    Uv,
-    Colors
+bitflags! {
+    /// A bit flags type that represents a set of vertex attributes.
+    #[derive(Clone, Copy, Debug)]
+    pub struct VertexAttributes: u32 {
+        const POSITIONS = 1 << 0;
+        const UVS = 1 << 2;
+        const COLORS = 1 << 3;
+    }
 }

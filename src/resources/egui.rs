@@ -22,9 +22,9 @@ pub struct EguiStateResource {
 /// Based on <https://github.com/kaphula/winit-egui-wgpu-template>.
 /// 
 /// This has to be dropped before
-/// [`crate::resources::winit::WinitResource::window`] and
-/// [`crate::resources::wgpu::WgpuResource::device`] because if this is dropped
-/// after them, the app will segfault. See
+/// [`WinitResource::window`][crate::resources::winit::WinitResource::window]
+/// and [`WgpuResource::device`][crate::resources::wgpu::WgpuResource::device]
+/// because if this is dropped after them, the app will segfault. See
 /// <https://github.com/emilk/egui/issues/7369>.
 #[derive(Resource)]
 pub struct EguiRendererResource {
@@ -101,7 +101,7 @@ impl EguiRendererResource {
     }
 
     /// Should be called in
-    /// [`winit::application::ApplicationHandler::window_event`].
+    /// [`ApplicationHandler::window_event`][winit::application::ApplicationHandler::window_event].
     pub fn handle_event(&self, window: &Window, event: &WindowEvent) -> EventResponse {
         let mut state = self.state.lock_and_unwrap();
         state.on_window_event(window, event)

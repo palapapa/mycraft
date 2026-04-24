@@ -17,8 +17,7 @@ use winit::window::*;
 use winit::event::WindowEvent::{self, *};
 use wgpu::*;
 use crate::resources::egui::*;
-use crate::resources::wgpu::*;
-use crate::resources::winit::*;
+use crate::resources::renderer::*;
 use crate::schedules::*;
 use crate::world::*;
 

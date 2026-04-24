@@ -4,8 +4,7 @@ use std::iter::*;
 use wgpu::*;
 use crate::components::egui::*;
 use crate::resources::egui::*;
-use crate::resources::wgpu::*;
-use crate::resources::winit::*;
+use crate::resources::renderer::*;
 
 pub fn initialize_egui_system(
     wgpu_resource: Res<'_, WgpuResource>,

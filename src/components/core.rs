@@ -8,8 +8,8 @@ use crate::camera::*;
 use crate::material::*;
 use crate::mesh::*;
 
-/// Represents an [`bevy_ecs::entity::Entity`]s transformation in its local
-/// space. This [`Component`] must be accompanied by
+/// Represents an [`Entity`][bevy_ecs::entity::Entity]'s transformation in its
+/// local space. This [`Component`] must be accompanied by
 /// [`GlobalTransformComponent`] and [`TransformTreeChangedComponent`], which
 /// are added automatically whenever this [`Component`] is added. It is an error
 /// to later remove any one of the three. Any entities that have a physical
@@ -46,14 +46,14 @@ impl From<&TransformComponent> for Affine3A {
     }
 }
 
-/// Represents an [`bevy_ecs::entity::Entity`]s transformation in the world
-/// space. The value of this [`Component`] is managed by
+/// Represents an [`Entity`][bevy_ecs::entity::Entity]'s transformation in the
+/// world space. The value of this [`Component`] is managed by
 /// [`crate::systems::transform`] automatically. Other places should not
 /// directly modify its value.
 #[derive(Component, Default, PartialEq)]
 #[component(on_insert = validate_parent_has_component::<GlobalTransformComponent>)]
 pub struct GlobalTransformComponent {
-    /// The global (world) transform of an [`bevy_ecs::entity::Entity`].
+    /// The global (world) transform of an [`Entity`][bevy_ecs::entity::Entity].
     global_transform: Affine3A
 }
 
@@ -88,8 +88,8 @@ impl<T: Borrow<TransformComponent>> From<T> for GlobalTransformComponent {
 }
 
 /// A marker [`Component`] that acts as a dirty bit and uses change detection to
-/// mark whether an [`bevy_ecs::entity::Entity`] or any of its descendants'
-/// [`GlobalTransformComponent`] need to be recalculated. See
+/// mark whether an [`Entity`][bevy_ecs::entity::Entity] or any of its
+/// descendants' [`GlobalTransformComponent`] need to be recalculated. See
 /// [`crate::systems::transform`] for more detail.
 #[derive(Component, Default)]
 pub struct TransformTreeChangedComponent;
@@ -100,9 +100,20 @@ pub struct CameraComponent {
     pub projection_mode: ProjectionMode
 }
 
+/// Represents a [`Mesh`] to be rendered. A [`MaterialComponent`] must also be
+/// present on the same [`Entity`][bevy_ecs::entity::Entity] for it to be
+/// rendered, but this cannot be enforced through [`RequiredComponents`] because
+/// [`MaterialComponent`] is generic.
 #[derive(Component)]
 #[require(TransformComponent)]
-pub struct MeshRendererComponent {
-    pub material: AssetHandle<dyn Material + Send + Sync>,
-    pub mesh: AssetHandle<Mesh>
+pub struct MeshComponent {
+    pub mesh_handle: AssetHandle<Mesh>
+}
+
+/// A [`Component`] that holds a [`Material`]. `M` is bound by `'static` so that
+/// it can be used like `Query<&MaterialComponent<M>>` in a system without
+/// adding a `'static` bound on `M`.
+#[derive(Component)]
+pub struct MaterialComponent<M: Material + 'static> {
+    pub material_handle: AssetHandle<M>
 }
